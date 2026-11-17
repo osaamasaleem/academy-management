@@ -10,7 +10,7 @@ import { logAudit } from '../services/audit.js';
 const router = Router();
 
 // Protect all teacher routes: authenticated + admin only
-router.use(verifyAuth, requireAdmin);
+router.use('/teachers', verifyAuth, requireAdmin);
 
 const createTeacherSchema = z.object({
   full_name: z.string().min(1, 'Full name is required').max(120),

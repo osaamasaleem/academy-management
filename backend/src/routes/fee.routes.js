@@ -9,7 +9,7 @@ import { getTodayPKString, clampDueDay, isPeriodOverdue } from '../services/bill
 const router = Router();
 
 // Protect all fee routes: must be authenticated with can_manage_fees (or admin)
-router.use(verifyAuth, requirePermission('can_manage_fees'));
+router.use('/fees', verifyAuth, requirePermission('can_manage_fees'));
 
 const recordFeeSchema = z.object({
   student_id: z.coerce.number().int().positive('Student ID is required'),
