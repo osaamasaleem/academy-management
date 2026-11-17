@@ -25,13 +25,32 @@ Repository: https://github.com/osaamasaleem/academy-management.git
 
 ---
 
-## Phase 1: Database & Authentication Core (Pending)
-- [ ] Connect to PostgreSQL instance
-- [ ] Execute `001_init.sql` schema migration
-- [ ] Seed script for Admin (`seedAdmin.js`)
-- [ ] JWT Cookie Auth & Middleware (`verifyAuth`, `requirePermission`, `requireAdmin`)
-- [ ] Auth endpoints (`login`, `logout`, `me`, `change-password`)
-- [ ] Frontend Login & Protected Routes (`AuthContext.jsx`, `Login.jsx`, `Layout.jsx`)
+## Phase 1: Database & Authentication Core (Completed)
+- **Status:** Complete
+- **Date:** 2026-11-17
+- **Key Deliverables:**
+  - Connected to Neon PostgreSQL cloud instance (v18.7).
+  - Executed baseline migration (`schema.sql` via `src/scripts/migrate.js`).
+  - Seeded initial Principal Admin (`src/scripts/seedAdmin.js`) with full delegated permissions.
+  - Implemented password recovery/reset script (`src/scripts/resetAdminPassword.js`).
+  - Built security & RBAC middleware:
+    - `verifyAuth`: Validates JWT from HttpOnly cookie against DB live state and `token_version`.
+    - `requirePermission`: Enforces granular teacher permissions with unrestricted admin pass.
+    - `requireAdmin`: Admin-only route guard.
+    - `rateLimit`: Brute-force protection on `/api/auth/login`.
+  - Built Auth API routes (`backend/src/routes/auth.routes.js`):
+    - `POST /api/auth/login`: Rate-limited, constant-time hash comparison, HttpOnly cookie.
+    - `POST /api/auth/logout`: Clears session cookie.
+    - `GET /api/auth/me`: Live user flags and profile.
+    - `POST /api/auth/change-password`: Increments `token_version`, logs to `audit_logs`.
+  - Frontend implementation:
+    - `AuthContext.jsx`: Session provider with auto-login check, login/logout methods, live permissions.
+    - `ProtectedRoute.jsx`: Client-side route guard based on role and required permissions.
+    - `Layout.jsx`: Responsive sidebar displaying only permitted navigation links, user details, and logout.
+    - `Login.jsx`: Mobile-first sign-in form with error handling and loading indicators.
+    - `Dashboard.jsx`: Session overview and permission status cards.
+    - `ChangePassword.jsx`: Secure password modification form.
+  - Automated DoD test suite (`backend/tests/phase1_auth.test.js`): 7/7 tests passed.
 
 ---
 

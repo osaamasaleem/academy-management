@@ -6,6 +6,7 @@ import { pinoHttp } from 'pino-http';
 import pino from 'pino';
 import { env } from './config/env.js';
 import healthRoutes from './routes/health.routes.js';
+import authRoutes from './routes/auth.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
@@ -44,6 +45,7 @@ if (env.NODE_ENV === 'development') {
 
 // Routes
 app.use('/api', healthRoutes);
+app.use('/api', authRoutes);
 
 // Error handling
 app.use(errorHandler);

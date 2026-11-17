@@ -1,63 +1,36 @@
-import { useEffect, useState } from 'react';
-import apiClient from './api/axiosClient';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
+import Layout from './components/Layout';
+import Login from './pages/Login';
+import Dashboard from './pages/Dashboard';
+import ChangePassword from './pages/ChangePassword';
 
-function App() {
-  const [health, setHealth] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    apiClient.get('/health')
-      .then((res) => {
-        setHealth(res.data.data);
-        setLoading(false);
-      })
-      .catch((err) => {
-        setError(err.message || 'Failed to connect to backend API');
-        setLoading(false);
-      });
-  }, []);
-
+export default function App() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
-      <div className="max-w-md w-full bg-white rounded-xl shadow-md p-6 space-y-4">
-        <h1 className="text-2xl font-bold text-slate-800 text-center">
-          Academy Management System
-        </h1>
-        <p className="text-sm text-slate-500 text-center">
-          Phase 0: Scaffolding & Proxy Check
-        </p>
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<Login />} />
 
-        <div className="border border-slate-200 rounded-lg p-4 bg-slate-50">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-slate-600">Backend API:</span>
-            {loading && <span className="text-xs text-amber-600 font-semibold">Checking...</span>}
-            {!loading && health && (
-              <span className="text-xs bg-emerald-100 text-emerald-800 font-semibold px-2 py-0.5 rounded-full">
-                Online ({health.status})
-              </span>
-            )}
-            {!loading && error && (
-              <span className="text-xs bg-red-100 text-red-800 font-semibold px-2 py-0.5 rounded-full">
-                Offline
-              </span>
-            )}
-          </div>
-          {health && (
-            <div className="mt-3 text-xs text-slate-500 space-y-1">
-              <div><strong>Timestamp:</strong> {health.timestamp}</div>
-              <div><strong>Uptime:</strong> {Math.round(health.uptime)}s</div>
-            </div>
-          )}
-          {error && (
-            <div className="mt-3 text-xs text-red-600">
-              {error}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+          <Route element={<ProtectedRoute />}>
+            <Route element={<Layout />}>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/change-password" element={<ChangePassword />} />
+              
+              {/* Upcoming phases routes */}
+              <Route path="/teachers" element={<div className="bg-white p-6 rounded-xl border border-slate-200"><h2 className="text-xl font-bold">Teachers Management (Phase 2)</h2></div>} />
+              <Route path="/students" element={<div className="bg-white p-6 rounded-xl border border-slate-200"><h2 className="text-xl font-bold">Students Management (Phase 3)</h2></div>} />
+              <Route path="/fees" element={<div className="bg-white p-6 rounded-xl border border-slate-200"><h2 className="text-xl font-bold">Fee Ledger (Phase 3)</h2></div>} />
+              <Route path="/attendance" element={<div className="bg-white p-6 rounded-xl border border-slate-200"><h2 className="text-xl font-bold">Teacher Attendance (Phase 4)</h2></div>} />
+              <Route path="/my-attendance" element={<div className="bg-white p-6 rounded-xl border border-slate-200"><h2 className="text-xl font-bold">My Attendance (Phase 4)</h2></div>} />
+              <Route path="/audit-logs" element={<div className="bg-white p-6 rounded-xl border border-slate-200"><h2 className="text-xl font-bold">Audit Logs (Phase 4)</h2></div>} />
+            </Route>
+          </Route>
+
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
   );
 }
-
-export default App;
