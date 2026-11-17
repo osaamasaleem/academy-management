@@ -21,7 +21,7 @@ Repository: https://github.com/osaamasaleem/academy-management.git
     - Axios instance (`api/axiosClient.js`) configured with credentials and `/api` proxy.
     - Verified Vite dev proxy to backend.
     - Tested production build (`npm run build`).
-  - Git repository initialized on `main` branch.
+  - Git repository initialized and successfully pushed to `main` at `https://github.com/osaamasaleem/academy-management.git`.
 
 ---
 
