@@ -7,6 +7,15 @@ import { logAudit } from '../services/audit.js';
 
 const router = Router();
 
+const initialFeeRowSchema = z.object({
+  billing_month: z.number().int().min(1).max(12),
+  billing_year: z.number().int().min(2020),
+  fee_amount: z.number().min(0),
+  status: z.enum(['paid', 'unpaid', 'waived']),
+  paid_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  remarks: z.string().max(255).optional().nullable()
+});
+
 const createStudentSchema = z.object({
   full_name: z.string().min(1, 'Full name is required').max(120),
   guardian_name: z.string().max(120).optional().nullable(),
@@ -17,7 +26,8 @@ const createStudentSchema = z.object({
   fee_due_day: z.coerce.number().int().min(1).max(31).default(1),
   fee_note: z.string().max(255).optional().nullable(),
   admission_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Admission date must be YYYY-MM-DD').optional(),
-  roll_no: z.string().max(30).optional().nullable().or(z.literal(''))
+  roll_no: z.string().max(30).optional().nullable().or(z.literal('')),
+  initial_fee_history: z.array(initialFeeRowSchema).optional()
 });
 
 const updateStudentSchema = z.object({
@@ -31,7 +41,17 @@ const updateStudentSchema = z.object({
   fee_note: z.string().max(255).optional().nullable(),
   admission_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   roll_no: z.string().min(1).max(30).optional(),
-  status: z.enum(['active', 'inactive']).optional()
+  status: z.enum(['Active', 'Left', 'active', 'inactive']).optional()
+});
+
+const leaveStudentSchema = z.object({
+  last_month: z.coerce.number().int().min(1).max(12),
+  last_year: z.coerce.number().int().min(2020)
+});
+
+const returnStudentSchema = z.object({
+  return_month: z.coerce.number().int().min(1).max(12),
+  return_year: z.coerce.number().int().min(2020)
 });
 
 // GET /api/students (read permission)
@@ -53,8 +73,16 @@ router.get(
       let params = [];
 
       if (status && status !== 'all') {
-        params.push(status);
-        whereConditions.push(`status = $${params.length}`);
+        if (status === 'active' || status === 'Active') {
+          whereConditions.push(`status IN ('active', 'Active')`);
+        } else if (status === 'Left') {
+          whereConditions.push(`status = 'Left'`);
+        } else if (status === 'inactive') {
+          whereConditions.push(`status = 'inactive'`);
+        } else {
+          params.push(status);
+          whereConditions.push(`status = $${params.length}`);
+        }
       }
 
       if (grade) {
@@ -80,7 +108,7 @@ router.get(
 
       const dataQuery = `
         SELECT id, roll_no, full_name, guardian_name, guardian_phone, grade, stream,
-               monthly_fee, fee_due_day, fee_note, admission_date, status,
+               monthly_fee, fee_due_day, fee_note, admission_date, status, enrollment_history,
                created_by, created_at, updated_at
         FROM students
         ${whereClause}
@@ -130,17 +158,32 @@ router.post(
   verifyAuth,
   requirePermission('can_manage_students'),
   async (req, res, next) => {
+    const client = await pool.connect();
     try {
       const parsed = createStudentSchema.parse(req.body);
 
       if (parsed.roll_no) {
-        const existing = await pool.query('SELECT id FROM students WHERE LOWER(roll_no) = LOWER($1)', [parsed.roll_no.trim()]);
+        const existing = await client.query('SELECT id FROM students WHERE LOWER(roll_no) = LOWER($1)', [parsed.roll_no.trim()]);
         if (existing.rows.length > 0) {
           return res.status(409).json({
             error: { code: 'DUPLICATE_ROLL_NO', message: 'Roll number already exists' }
           });
         }
       }
+
+      await client.query('BEGIN');
+
+      const admDate = parsed.admission_date || new Date().toISOString().split('T')[0];
+      const [admYear, admMonth] = admDate.split('-').map(Number);
+
+      const initialEnrollment = JSON.stringify([
+        {
+          from_year: admYear,
+          from_month: admMonth,
+          to_year: null,
+          to_month: null
+        }
+      ]);
 
       let insertQuery;
       let values;
@@ -149,9 +192,9 @@ router.post(
         insertQuery = `
           INSERT INTO students (
             roll_no, full_name, guardian_name, guardian_phone, grade, stream,
-            monthly_fee, fee_due_day, fee_note, admission_date, status, created_by
+            monthly_fee, fee_due_day, fee_note, admission_date, status, enrollment_history, created_by
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE($10::date, today_pk()), 'active', $11)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::date, 'Active', $11::jsonb, $12)
           RETURNING *;
         `;
         values = [
@@ -164,16 +207,17 @@ router.post(
           parsed.monthly_fee,
           parsed.fee_due_day,
           parsed.fee_note ? parsed.fee_note.trim() : null,
-          parsed.admission_date || null,
+          admDate,
+          initialEnrollment,
           req.user.id
         ];
       } else {
         insertQuery = `
           INSERT INTO students (
             full_name, guardian_name, guardian_phone, grade, stream,
-            monthly_fee, fee_due_day, fee_note, admission_date, status, created_by
+            monthly_fee, fee_due_day, fee_note, admission_date, status, enrollment_history, created_by
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9::date, today_pk()), 'active', $10)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::date, 'Active', $10::jsonb, $11)
           RETURNING *;
         `;
         values = [
@@ -185,13 +229,47 @@ router.post(
           parsed.monthly_fee,
           parsed.fee_due_day,
           parsed.fee_note ? parsed.fee_note.trim() : null,
-          parsed.admission_date || null,
+          admDate,
+          initialEnrollment,
           req.user.id
         ];
       }
 
-      const { rows } = await pool.query(insertQuery, values);
+      const { rows } = await client.query(insertQuery, values);
       const student = rows[0];
+
+      // If initial historical fee records provided during onboarding, insert them
+      if (Array.isArray(parsed.initial_fee_history) && parsed.initial_fee_history.length > 0) {
+        for (const f of parsed.initial_fee_history) {
+          const amountPaid = f.status === 'paid' ? f.fee_amount : 0;
+          const paidDate = f.status === 'paid' ? (f.paid_date || admDate) : null;
+
+          const feeInsert = `
+            INSERT INTO fee_records (
+              student_id, billing_month, billing_year, fee_amount,
+              amount_paid, status, paid_date, remarks, recorded_by
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            ON CONFLICT (student_id, billing_month, billing_year)
+            DO UPDATE SET fee_amount = EXCLUDED.fee_amount, amount_paid = EXCLUDED.amount_paid,
+                          status = EXCLUDED.status, paid_date = EXCLUDED.paid_date,
+                          remarks = EXCLUDED.remarks, recorded_by = EXCLUDED.recorded_by;
+          `;
+          await client.query(feeInsert, [
+            student.id,
+            f.billing_month,
+            f.billing_year,
+            f.fee_amount,
+            amountPaid,
+            f.status,
+            paidDate,
+            f.remarks || null,
+            req.user.id
+          ]);
+        }
+      }
+
+      await client.query('COMMIT');
 
       await logAudit({
         actorId: req.user.id,
@@ -203,7 +281,149 @@ router.post(
 
       res.status(201).json({ data: student });
     } catch (error) {
+      await client.query('ROLLBACK');
       next(error);
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// POST /api/students/:id/leave (Mark as Left)
+router.post(
+  '/students/:id/leave',
+  verifyAuth,
+  requirePermission('can_manage_students'),
+  async (req, res, next) => {
+    const client = await pool.connect();
+    try {
+      const studentId = parseInt(req.params.id, 10);
+      const { last_month, last_year } = leaveStudentSchema.parse(req.body);
+
+      const stuRes = await client.query('SELECT * FROM students WHERE id = $1', [studentId]);
+      if (stuRes.rows.length === 0) {
+        return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Student not found' } });
+      }
+      const student = stuRes.rows[0];
+
+      await client.query('BEGIN');
+
+      // Update enrollment_history: find the active open interval and close it
+      let history = Array.isArray(student.enrollment_history) ? [...student.enrollment_history] : [];
+      if (history.length === 0) {
+        const [admY, admM] = String(student.admission_date).split('-').map(Number);
+        history = [{ from_year: admY, from_month: admM, to_year: last_year, to_month: last_month }];
+      } else {
+        const lastIdx = history.length - 1;
+        history[lastIdx] = {
+          ...history[lastIdx],
+          to_year: last_year,
+          to_month: last_month
+        };
+      }
+
+      // Update student status to 'Left'
+      await client.query(
+        `UPDATE students SET status = 'Left', enrollment_history = $1::jsonb, updated_at = NOW() WHERE id = $2`,
+        [JSON.stringify(history), studentId]
+      );
+
+      // Remove only unpaid rows strictly after last_month / last_year (never touch paid or waived)
+      const deleteUnpaidRes = await client.query(
+        `DELETE FROM fee_records
+         WHERE student_id = $1
+           AND status = 'unpaid'
+           AND (billing_year > $2 OR (billing_year = $2 AND billing_month > $3))
+         RETURNING id;`,
+        [studentId, last_year, last_month]
+      );
+
+      await client.query('COMMIT');
+
+      await logAudit({
+        actorId: req.user.id,
+        action: 'student.leave',
+        entityType: 'student',
+        entityId: studentId,
+        details: {
+          last_attended: `${last_month}/${last_year}`,
+          unpaid_future_rows_removed: deleteUnpaidRes.rowCount
+        }
+      });
+
+      res.status(200).json({
+        data: {
+          id: studentId,
+          status: 'Left',
+          last_attended: `${last_month}/${last_year}`,
+          unpaid_future_rows_removed: deleteUnpaidRes.rowCount,
+          message: 'Student marked as Left successfully'
+        }
+      });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      next(error);
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// POST /api/students/:id/return (Return / Re-enroll)
+router.post(
+  '/students/:id/return',
+  verifyAuth,
+  requirePermission('can_manage_students'),
+  async (req, res, next) => {
+    const client = await pool.connect();
+    try {
+      const studentId = parseInt(req.params.id, 10);
+      const { return_month, return_year } = returnStudentSchema.parse(req.body);
+
+      const stuRes = await client.query('SELECT * FROM students WHERE id = $1', [studentId]);
+      if (stuRes.rows.length === 0) {
+        return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Student not found' } });
+      }
+      const student = stuRes.rows[0];
+
+      await client.query('BEGIN');
+
+      let history = Array.isArray(student.enrollment_history) ? [...student.enrollment_history] : [];
+      history.push({
+        from_year: return_year,
+        from_month: return_month,
+        to_year: null,
+        to_month: null
+      });
+
+      await client.query(
+        `UPDATE students SET status = 'Active', enrollment_history = $1::jsonb, updated_at = NOW() WHERE id = $2`,
+        [JSON.stringify(history), studentId]
+      );
+
+      await client.query('COMMIT');
+
+      await logAudit({
+        actorId: req.user.id,
+        action: 'student.return',
+        entityType: 'student',
+        entityId: studentId,
+        details: { return_period: `${return_month}/${return_year}` }
+      });
+
+      res.status(200).json({
+        data: {
+          id: studentId,
+          status: 'Active',
+          return_period: `${return_month}/${return_year}`,
+          message: 'Student returned and reactivated successfully'
+        }
+      });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      next(error);
+    } finally {
+      client.release();
     }
   }
 );

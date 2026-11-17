@@ -100,6 +100,45 @@ Repository: https://github.com/osaamasaleem/academy-management.git
 
 ---
 
+## Phase 3b: Fee Ledger Refactor (Completed)
+- **Status:** Complete
+- **Date:** 2026-11-17
+- **Key Deliverables:**
+  - **DB Migration** (`backend/migrations/002_ledger_refactor.sql`) applied to Neon:
+    - `enrollment_history JSONB` column added to `students` (auto-populated from `admission_date` for existing rows).
+    - `students.status` constraint expanded: `'Active' | 'Left' | 'active' | 'inactive'`.
+    - `fee_records.status` constraint expanded: `'paid' | 'unpaid' | 'waived'`.
+    - `chk_paid_consistency` updated to allow `waived` rows with `amount_paid = 0`.
+  - **Billing Engine** (`backend/src/services/billing.js`):
+    - Added `isMonthInInterval()` and `isEnrolledInPeriod()` helpers for enrollment gap detection.
+  - **Student API** (`backend/src/routes/student.routes.js`):
+    - `POST /api/students`: New students default to `status = 'Active'` with an open `enrollment_history` interval. Accepts optional `initial_fee_history` array for onboarding fee pre-population (with upsert, no duplicates).
+    - `POST /api/students/:id/leave`: Closes the open enrollment interval at the chosen month, removes only future unpaid rows (never touches paid/waived), audit logged, transactional.
+    - `POST /api/students/:id/return`: Appends a new open interval from the chosen return month, sets `status = 'Active'`, audit logged, transactional.
+  - **Fee API** (`backend/src/routes/fee.routes.js`):
+    - Monthly sheet now filters by `isEnrolledInPeriod()` — gap months (between leave and return) are never shown as overdue.
+    - `GET /api/fees/student/:id` lifetime ledger: gap months without fee records are returned as `status: 'not_enrolled'` with `is_enrolled: false`.
+    - Summary excludes `waived` rows from expected/pending/outstanding balance and overdue counts.
+    - `POST /api/fees/bulk`: Bulk actions (set_fee, mark_paid, waive) with **dry-run** preview mode. All changes in a single transaction; uses `ON CONFLICT DO UPDATE` to prevent duplicate rows. Audit logged per batch.
+    - `POST /api/fees/record`: Updated to handle `waived` status (upsert safe).
+  - **Frontend** (`frontend/src/pages/StudentFeeHistory.jsx`):
+    - Multi-select checkboxes (single, range, select-all) on ledger rows.
+    - Floating sticky bulk action bar: **Set Fee**, **Mark Paid** (with date picker), **Waive** (with optional reason).
+    - Dry-run preview modal showing before/after for each selected period with change count.
+    - **Mark as Left** modal — pick last attended month; future unpaid rows auto-removed.
+    - **Return / Re-enroll** modal — pick return month.
+    - Gap months rendered as "Not enrolled" (grey, no checkbox, excluded from balance).
+    - `waived` status badge (purple); outstanding balance excludes waived and not_enrolled rows.
+  - **Frontend** (`frontend/src/pages/Students.jsx`):
+    - 2-step enrollment flow: Step 1 = student details, Step 2 = fee history review before saving.
+    - Step 2 generates months from admission date to current month with per-row inline editing.
+    - Bulk actions on Step 2: Set Fee, Mark Paid (with date), Waive for pre-system history correction.
+    - Student list shows **Left** badge on status column.
+  - **Test Suite** (`backend/tests/phase3b_ledger_refactor.test.js`): **10/10 tests passed**.
+    - Covers: status defaults, dry-run no-commit, set_fee commit, waive + balance exclusion, mark_paid, duplicate-row safety, leave (unpaid removal + paid preservation), return (new interval), ledger after return, paid row survival.
+
+---
+
 ## Phase 4: Teacher Attendance, Dashboard & Audit (Pending)
 - [ ] Daily attendance marking & personal view
 - [ ] System dashboard statistics

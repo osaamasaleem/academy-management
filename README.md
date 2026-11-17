@@ -4,7 +4,7 @@ Internal web platform for Grade 1–12 coaching academy management (Admin & Teac
 
 ---
 
-## Current Build Status (Phase 3 Completed)
+## Current Build Status (Phase 3b Completed)
 
 - **Phase 0: Scaffolding & Proxy** (Complete)
   - Vite same-origin proxy, Zod environment validation, baseline schema, health checks.
@@ -16,6 +16,13 @@ Internal web platform for Grade 1–12 coaching academy management (Admin & Teac
   - Student enrollment (Grades 1–12), auto roll-number sequences (`STU-00001`), custom due days (1st vs 17th).
   - Due-date clamping (Feb 28/29), overdue computation in Pakistan time (`Asia/Karachi`).
   - Monthly fee sheet with implicit unpaid rows, KPI summaries, one-click payment recording, admin payment reversal, and lifetime student ledgers.
+- **Phase 3b: Fee Ledger Refactor** (Complete)
+  - **Waived status**: mark individual or bulk months as waived (with optional reason); waived rows stay visible but are excluded from outstanding balance and overdue counts.
+  - **Bulk actions with dry-run**: select any combination of months → Set Fee, Mark Paid (with date), or Waive → preview changes before applying. All changes execute in a single transaction; duplicate rows are prevented.
+  - **Active / Left enrollment**: students start `Active`. "Mark as Left" closes the enrollment interval at a chosen month and removes only future unpaid rows (paid rows are never touched). "Return" appends a new open interval — same student record and roll number.
+  - **Gap months** (between Leave and Return): no rows generated; displayed as "Not enrolled" in the ledger; never counted as overdue.
+  - **Onboarding fee history review**: 2-step enrollment flow — after entering details, review/edit all historical months before saving (bulk set fee, mark paid, waive).
+  - All enrollment changes and fee edits are audit logged (who, what changed, before/after).
 - **Phase 4: Teacher Attendance, Dashboard & Audit** (Next)
 - **Phase 5: Hardening & Deployment** (Pending)
 
@@ -93,4 +100,7 @@ node backend/tests/phase2_teachers.test.js
 
 # Phase 3: Student & Fee Ledger Tests
 node backend/tests/phase3_students_fees.test.js
+
+# Phase 3b: Fee Ledger Refactor Tests (waived, bulk, leave/return)
+node backend/tests/phase3b_ledger_refactor.test.js
 ```

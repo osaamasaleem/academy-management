@@ -30,7 +30,7 @@ export function getTodayPKString() {
 }
 
 export function isPeriodOverdue(status, dueDateString, todayPKString = getTodayPKString()) {
-  if (status === 'paid') return false;
+  if (status === 'paid' || status === 'waived') return false;
   return todayPKString > dueDateString;
 }
 
@@ -40,4 +40,32 @@ export function isPeriodBeforeAdmission(admissionDateString, billingYear, billin
   if (billingYear < admYear) return true;
   if (billingYear === admYear && billingMonth < admMonth) return true;
   return false;
+}
+
+export function isMonthInInterval(year, month, fromYear, fromMonth, toYear, toMonth) {
+  const target = year * 12 + month;
+  const start = fromYear * 12 + fromMonth;
+  if (target < start) return false;
+  if (toYear != null && toMonth != null) {
+    const end = toYear * 12 + toMonth;
+    if (target > end) return false;
+  }
+  return true;
+}
+
+export function isEnrolledInPeriod(enrollmentHistory, year, month) {
+  if (!Array.isArray(enrollmentHistory) || enrollmentHistory.length === 0) {
+    return true; // fallback
+  }
+
+  return enrollmentHistory.some(interval => {
+    return isMonthInInterval(
+      year,
+      month,
+      interval.from_year,
+      interval.from_month,
+      interval.to_year,
+      interval.to_month
+    );
+  });
 }

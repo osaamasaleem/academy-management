@@ -50,7 +50,8 @@ CREATE TABLE IF NOT EXISTS students (
   fee_due_day SMALLINT NOT NULL DEFAULT 1 CHECK (fee_due_day BETWEEN 1 AND 31),
   fee_note VARCHAR(255),
   admission_date DATE NOT NULL DEFAULT today_pk(),
-  status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+  status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('Active', 'Left', 'active', 'inactive')),
+  enrollment_history JSONB NOT NULL DEFAULT '[]',
   created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -63,7 +64,7 @@ CREATE TABLE IF NOT EXISTS fee_records (
   billing_year SMALLINT NOT NULL CHECK (billing_year >= 2020),
   fee_amount NUMERIC(10, 2) NOT NULL CHECK (fee_amount >= 0),
   amount_paid NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (amount_paid >= 0),
-  status VARCHAR(20) NOT NULL DEFAULT 'unpaid' CHECK (status IN ('paid', 'unpaid')),
+  status VARCHAR(20) NOT NULL DEFAULT 'unpaid' CHECK (status IN ('paid', 'unpaid', 'waived')),
   paid_date DATE,
   remarks VARCHAR(255),
   recorded_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -72,7 +73,8 @@ CREATE TABLE IF NOT EXISTS fee_records (
   CONSTRAINT uq_student_month_year UNIQUE (student_id, billing_month, billing_year),
   CONSTRAINT chk_paid_consistency CHECK (
     (status = 'paid'   AND paid_date IS NOT NULL AND amount_paid > 0) OR
-    (status = 'unpaid' AND paid_date IS NULL     AND amount_paid = 0)
+    (status = 'unpaid' AND paid_date IS NULL     AND amount_paid = 0) OR
+    (status = 'waived' AND amount_paid = 0)
   )
 );
 

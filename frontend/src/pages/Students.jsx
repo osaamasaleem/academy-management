@@ -13,7 +13,12 @@ import {
   Edit2,
   CreditCard,
   AlertCircle,
-  X
+  X,
+  ArrowRight,
+  ArrowLeft,
+  CheckSquare,
+  Square,
+  Ban
 } from 'lucide-react';
 
 export default function Students() {
@@ -33,6 +38,7 @@ export default function Students() {
   const [modalOpen, setModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [onboardingStep, setOnboardingStep] = useState(1); // 1 = Details, 2 = Fee History Review
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -51,6 +57,13 @@ export default function Students() {
   };
 
   const [formData, setFormData] = useState(initialForm);
+
+  // Generated historical fee rows for Step 2
+  const [historyRows, setHistoryRows] = useState([]);
+  const [selectedHistoryIndices, setSelectedHistoryIndices] = useState([]);
+  const [bulkFeeVal, setBulkFeeVal] = useState('');
+  const [bulkPaidDateVal, setBulkPaidDateVal] = useState(new Date().toISOString().split('T')[0]);
+  const [bulkWaiveReason, setBulkWaiveReason] = useState('Pre-system history');
 
   const fetchStudents = useCallback(async () => {
     try {
@@ -86,7 +99,10 @@ export default function Students() {
     setError('');
     setIsEditing(false);
     setEditingId(null);
+    setOnboardingStep(1);
     setFormData(initialForm);
+    setHistoryRows([]);
+    setSelectedHistoryIndices([]);
     setModalOpen(true);
   };
 
@@ -94,6 +110,7 @@ export default function Students() {
     setError('');
     setIsEditing(true);
     setEditingId(student.id);
+    setOnboardingStep(1);
     setFormData({
       roll_no: student.roll_no,
       full_name: student.full_name,
@@ -107,6 +124,107 @@ export default function Students() {
       admission_date: student.admission_date ? student.admission_date.split('T')[0] : ''
     });
     setModalOpen(true);
+  };
+
+  // Step 1 -> Step 2: Generate months from admission date to current month
+  const handleProceedToHistoryReview = (e) => {
+    e.preventDefault();
+    if (isEditing) {
+      handleFinalSave();
+      return;
+    }
+
+    const admDate = formData.admission_date || new Date().toISOString().split('T')[0];
+    const [startYear, startMonth] = admDate.split('-').map(Number);
+
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+
+    const rows = [];
+    let curY = startYear;
+    let curM = startMonth;
+
+    while (curY < currentYear || (curY === currentYear && curM <= currentMonth)) {
+      rows.push({
+        billing_year: curY,
+        billing_month: curM,
+        fee_amount: formData.monthly_fee,
+        status: 'unpaid',
+        paid_date: null,
+        remarks: ''
+      });
+
+      curM++;
+      if (curM > 12) {
+        curM = 1;
+        curY++;
+      }
+    }
+
+    // Sort descending (latest on top)
+    rows.reverse();
+
+    setHistoryRows(rows);
+    setSelectedHistoryIndices(rows.map((_, i) => i)); // Default select all
+    setBulkFeeVal(formData.monthly_fee);
+    setOnboardingStep(2);
+  };
+
+  // Bulk actions on step 2 rows
+  const handleApplyBulkSetFee = () => {
+    if (selectedHistoryIndices.length === 0) return;
+    const val = parseFloat(bulkFeeVal) || 0;
+    setHistoryRows(prev =>
+      prev.map((r, i) => (selectedHistoryIndices.includes(i) ? { ...r, fee_amount: val } : r))
+    );
+  };
+
+  const handleApplyBulkMarkPaid = () => {
+    if (selectedHistoryIndices.length === 0) return;
+    setHistoryRows(prev =>
+      prev.map((r, i) =>
+        selectedHistoryIndices.includes(i)
+          ? { ...r, status: 'paid', paid_date: bulkPaidDateVal, remarks: 'Paid prior to system' }
+          : r
+      )
+    );
+  };
+
+  const handleApplyBulkWave = () => {
+    if (selectedHistoryIndices.length === 0) return;
+    setHistoryRows(prev =>
+      prev.map((r, i) =>
+        selectedHistoryIndices.includes(i)
+          ? { ...r, status: 'waived', paid_date: null, remarks: bulkWaiveReason || 'Pre-system history' }
+          : r
+      )
+    );
+  };
+
+  const handleFinalSave = async () => {
+    setError('');
+    setSubmitting(true);
+
+    try {
+      if (isEditing) {
+        await apiClient.patch(`/students/${editingId}`, formData);
+        showToast('Student profile updated successfully');
+      } else {
+        const payload = {
+          ...formData,
+          initial_fee_history: historyRows
+        };
+        await apiClient.post('/students', payload);
+        showToast('Student enrolled and fee history configured successfully');
+      }
+      setModalOpen(false);
+      fetchStudents();
+    } catch (err) {
+      setError(err?.message || 'Failed to save student details');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleToggleStatus = async (student) => {
@@ -131,38 +249,21 @@ export default function Students() {
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setSubmitting(true);
-
-    try {
-      if (isEditing) {
-        await apiClient.patch(`/students/${editingId}`, formData);
-        showToast('Student profile updated successfully');
-      } else {
-        await apiClient.post('/students', formData);
-        showToast('Student enrolled successfully');
-      }
-      setModalOpen(false);
-      fetchStudents();
-    } catch (err) {
-      setError(err?.message || 'Failed to save student details');
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  const monthNames = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  ];
 
   return (
     <div className="space-y-6">
-      {/* Top Header */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
         <div>
           <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2.5">
             <GraduationCap className="text-indigo-600" /> Student Directory
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Enroll students (Grades 1–12), configure rolling fee due days, and track records.
+            Enroll students (Grades 1–12), configure rolling fee due days, and review historical fee cycles.
           </p>
         </div>
         {canManage && (
@@ -233,6 +334,7 @@ export default function Students() {
           className="px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
         >
           <option value="active">Active Students</option>
+          <option value="Left">Left Academy</option>
           <option value="inactive">Archived Only</option>
           <option value="all">All Records</option>
         </select>
@@ -284,13 +386,17 @@ export default function Students() {
                         PKR {parseFloat(s.monthly_fee).toLocaleString()}
                       </div>
                       <div className="inline-block mt-0.5 px-2 py-0.5 rounded text-[11px] font-semibold bg-indigo-50 text-indigo-700">
-                        Due: {s.fee_due_day === 1 ? '1st of month' : `${s.fee_due_day}th of month`}
+                        Due: {s.fee_due_day === 1 ? '1st' : `${s.fee_due_day}th`}
                       </div>
                     </td>
                     <td className="py-3.5 px-4">
-                      {s.status === 'active' ? (
+                      {s.status === 'active' || s.status === 'Active' ? (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
                           <CheckCircle2 size={12} /> Active
+                        </span>
+                      ) : s.status === 'Left' ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+                          Left
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-200 text-slate-700">
@@ -321,14 +427,14 @@ export default function Students() {
                             </button>
                             <button
                               onClick={() => handleToggleStatus(s)}
-                              title={s.status === 'active' ? 'Archive Student' : 'Restore Student'}
+                              title={s.status === 'inactive' ? 'Restore Student' : 'Archive Student'}
                               className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-lg border transition ${
-                                s.status === 'active'
-                                  ? 'text-amber-700 border-amber-300 hover:bg-amber-50'
-                                  : 'text-emerald-700 border-emerald-300 hover:bg-emerald-50'
+                                s.status === 'inactive'
+                                  ? 'text-emerald-700 border-emerald-300 hover:bg-emerald-50'
+                                  : 'text-amber-700 border-amber-300 hover:bg-amber-50'
                               }`}
                             >
-                              {s.status === 'active' ? <Archive size={13} /> : <RefreshCw size={13} />}
+                              {s.status === 'inactive' ? <RefreshCw size={13} /> : <Archive size={13} />}
                             </button>
                           </>
                         )}
@@ -342,166 +448,346 @@ export default function Students() {
         )}
       </div>
 
-      {/* Modal: Enroll / Edit Student */}
+      {/* Modal: Enroll / Edit Student with Step 2 Fee History Review */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg border border-slate-200 overflow-hidden max-h-[90vh] flex flex-col">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl border border-slate-200 overflow-hidden max-h-[90vh] flex flex-col">
             <div className="bg-indigo-600 px-6 py-4 text-white flex items-center justify-between">
-              <h2 className="text-lg font-bold">
-                {isEditing ? 'Edit Student Profile' : 'Enroll New Student'}
-              </h2>
+              <div>
+                <h2 className="text-lg font-bold">
+                  {isEditing ? 'Edit Student Profile' : 'Enroll New Student'}
+                </h2>
+                {!isEditing && (
+                  <p className="text-xs text-indigo-200 mt-0.5">
+                    Step {onboardingStep} of 2: {onboardingStep === 1 ? 'Personal & Academic Details' : 'Review & Adjust Initial Fee History'}
+                  </p>
+                )}
+              </div>
               <button onClick={() => setModalOpen(false)} className="text-indigo-200 hover:text-white">
                 <X size={20} />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Full Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.full_name}
-                    onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    placeholder="e.g. Bilal Tariq"
-                  />
+            {onboardingStep === 1 ? (
+              <form onSubmit={handleProceedToHistoryReview} className="p-6 space-y-4 overflow-y-auto">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Full Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.full_name}
+                      onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                      placeholder="e.g. Bilal Tariq"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Roll No (optional, auto-generated)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.roll_no}
+                      onChange={(e) => setFormData({ ...formData, roll_no: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 font-mono"
+                      placeholder="Auto if left blank"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Roll No (optional, auto-generated)
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.roll_no}
-                    onChange={(e) => setFormData({ ...formData, roll_no: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 font-mono"
-                    placeholder="Auto if left blank"
-                  />
-                </div>
-              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Guardian Phone *</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.guardian_phone}
-                    onChange={(e) => setFormData({ ...formData, guardian_phone: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    placeholder="03001234567"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Guardian Phone *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.guardian_phone}
+                      onChange={(e) => setFormData({ ...formData, guardian_phone: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                      placeholder="03001234567"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Guardian Name</label>
+                    <input
+                      type="text"
+                      value={formData.guardian_name}
+                      onChange={(e) => setFormData({ ...formData, guardian_name: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                      placeholder="Father / Mother Name"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Guardian Name</label>
-                  <input
-                    type="text"
-                    value={formData.guardian_name}
-                    onChange={(e) => setFormData({ ...formData, guardian_name: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    placeholder="Father / Mother Name"
-                  />
-                </div>
-              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Grade (1–12) *</label>
-                  <select
-                    value={formData.grade}
-                    onChange={(e) => setFormData({ ...formData, grade: parseInt(e.target.value) })}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white"
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Grade (1–12) *</label>
+                    <select
+                      value={formData.grade}
+                      onChange={(e) => setFormData({ ...formData, grade: parseInt(e.target.value) })}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white"
+                    >
+                      {Array.from({ length: 12 }, (_, i) => i + 1).map((g) => (
+                        <option key={g} value={g}>Grade {g}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Stream *</label>
+                    <select
+                      value={formData.stream}
+                      onChange={(e) => setFormData({ ...formData, stream: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white"
+                    >
+                      <option value="General">General</option>
+                      <option value="Science">Science</option>
+                      <option value="ICS">ICS</option>
+                      <option value="Arts">Arts</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Monthly Fee (PKR) *</label>
+                    <input
+                      type="number"
+                      min="0"
+                      required
+                      value={formData.monthly_fee}
+                      onChange={(e) => setFormData({ ...formData, monthly_fee: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 font-semibold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Fee Due Day (1–31) *</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="31"
+                      required
+                      value={formData.fee_due_day}
+                      onChange={(e) => setFormData({ ...formData, fee_due_day: parseInt(e.target.value) || 1 })}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <span className="text-[11px] text-slate-400">1 = 1st of month; 17 = 17th of month</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Admission Date *</label>
+                    <input
+                      type="date"
+                      required
+                      value={formData.admission_date}
+                      onChange={(e) => setFormData({ ...formData, admission_date: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Fee Note / Remarks</label>
+                    <input
+                      type="text"
+                      value={formData.fee_note}
+                      onChange={(e) => setFormData({ ...formData, fee_note: e.target.value })}
+                      placeholder="e.g. 500 discount sibling concession"
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setModalOpen(false)}
+                    className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800"
                   >
-                    {Array.from({ length: 12 }, (_, i) => i + 1).map((g) => (
-                      <option key={g} value={g}>Grade {g}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Stream *</label>
-                  <select
-                    value={formData.stream}
-                    onChange={(e) => setFormData({ ...formData, stream: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white"
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="inline-flex items-center gap-1.5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold shadow-sm"
                   >
-                    <option value="General">General</option>
-                    <option value="Science">Science</option>
-                    <option value="ICS">ICS</option>
-                    <option value="Arts">Arts</option>
-                  </select>
+                    <span>{isEditing ? 'Save Changes' : 'Next: Review Fee History'}</span>
+                    {!isEditing && <ArrowRight size={16} />}
+                  </button>
                 </div>
-              </div>
+              </form>
+            ) : (
+              /* Step 2: Fee History Bulk-Edit Screen */
+              <div className="p-6 space-y-4 overflow-y-auto">
+                <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-100 text-xs text-indigo-900">
+                  <strong>Initial Fee Cycles Generated:</strong> {historyRows.length} months from admission date ({formData.admission_date}) through current month. You can adjust fees, mark past months as paid, or waive pre-system months before saving.
+                </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Monthly Fee (PKR) *</label>
-                  <input
-                    type="number"
-                    min="0"
-                    required
-                    value={formData.monthly_fee}
-                    onChange={(e) => setFormData({ ...formData, monthly_fee: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 font-semibold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Fee Due Day (1–31) *
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="31"
-                    required
-                    value={formData.fee_due_day}
-                    onChange={(e) => setFormData({ ...formData, fee_due_day: parseInt(e.target.value) || 1 })}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  />
-                  <span className="text-[11px] text-slate-400">1 = 1st of month; 17 = 17th of month</span>
-                </div>
-              </div>
+                {/* Bulk Actions Bar */}
+                <div className="p-3 bg-slate-100 rounded-lg flex flex-wrap items-center justify-between gap-2 border border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (selectedHistoryIndices.length === historyRows.length) {
+                          setSelectedHistoryIndices([]);
+                        } else {
+                          setSelectedHistoryIndices(historyRows.map((_, i) => i));
+                        }
+                      }}
+                      className="text-xs font-bold text-slate-700 flex items-center gap-1"
+                    >
+                      {selectedHistoryIndices.length === historyRows.length ? (
+                        <CheckSquare size={16} className="text-indigo-600" />
+                      ) : (
+                        <Square size={16} />
+                      )}
+                      <span>Select All ({selectedHistoryIndices.length})</span>
+                    </button>
+                  </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Admission Date</label>
-                  <input
-                    type="date"
-                    value={formData.admission_date}
-                    onChange={(e) => setFormData({ ...formData, admission_date: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Fee Note / Remarks</label>
-                  <input
-                    type="text"
-                    value={formData.fee_note}
-                    onChange={(e) => setFormData({ ...formData, fee_note: e.target.value })}
-                    placeholder="e.g. 500 discount sibling concession"
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-              </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Set Fee */}
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min="0"
+                        value={bulkFeeVal}
+                        onChange={(e) => setBulkFeeVal(e.target.value)}
+                        className="w-16 px-1.5 py-1 text-xs border rounded bg-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleApplyBulkSetFee}
+                        className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded"
+                      >
+                        Set Fee
+                      </button>
+                    </div>
 
-              <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setModalOpen(false)}
-                  className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold shadow-sm disabled:opacity-50"
-                >
-                  {submitting ? 'Saving...' : isEditing ? 'Save Changes' : 'Enroll Student'}
-                </button>
+                    {/* Mark Paid */}
+                    <button
+                      type="button"
+                      onClick={handleApplyBulkMarkPaid}
+                      className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold rounded"
+                    >
+                      Mark Paid
+                    </button>
+
+                    {/* Waive */}
+                    <button
+                      type="button"
+                      onClick={handleApplyBulkWave}
+                      className="px-2.5 py-1 bg-purple-700 hover:bg-purple-600 text-white text-xs font-semibold rounded flex items-center gap-1"
+                    >
+                      <Ban size={12} />
+                      <span>Waive (Pre-system)</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* History Rows Table */}
+                <div className="max-h-64 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 sticky top-0">
+                      <tr>
+                        <th className="p-2 w-8"></th>
+                        <th className="p-2">Cycle</th>
+                        <th className="p-2">Fee (PKR)</th>
+                        <th className="p-2">Status</th>
+                        <th className="p-2">Remarks</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {historyRows.map((row, idx) => {
+                        const isSelected = selectedHistoryIndices.includes(idx);
+                        return (
+                          <tr key={`${row.billing_year}-${row.billing_month}`} className={isSelected ? 'bg-indigo-50/50' : ''}>
+                            <td className="p-2 text-center">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => {
+                                  setSelectedHistoryIndices(prev =>
+                                    prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx]
+                                  );
+                                }}
+                                className="w-3.5 h-3.5 text-indigo-600 rounded"
+                              />
+                            </td>
+                            <td className="p-2 font-semibold">
+                              {monthNames[row.billing_month - 1]} {row.billing_year}
+                            </td>
+                            <td className="p-2">
+                              <input
+                                type="number"
+                                min="0"
+                                value={row.fee_amount}
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value) || 0;
+                                  setHistoryRows(prev =>
+                                    prev.map((r, i) => (i === idx ? { ...r, fee_amount: val } : r))
+                                  );
+                                }}
+                                className="w-20 px-1 py-0.5 border rounded bg-white font-medium"
+                              />
+                            </td>
+                            <td className="p-2">
+                              <select
+                                value={row.status}
+                                onChange={(e) => {
+                                  const st = e.target.value;
+                                  setHistoryRows(prev =>
+                                    prev.map((r, i) => (i === idx ? { ...r, status: st } : r))
+                                  );
+                                }}
+                                className="px-1.5 py-0.5 border rounded bg-white text-xs"
+                              >
+                                <option value="unpaid">Unpaid</option>
+                                <option value="paid">Paid</option>
+                                <option value="waived">Waived</option>
+                              </select>
+                            </td>
+                            <td className="p-2">
+                              <input
+                                type="text"
+                                placeholder="Remarks / note"
+                                value={row.remarks || ''}
+                                onChange={(e) => {
+                                  const rem = e.target.value;
+                                  setHistoryRows(prev =>
+                                    prev.map((r, i) => (i === idx ? { ...r, remarks: rem } : r))
+                                  );
+                                }}
+                                className="w-full px-1 py-0.5 border rounded bg-white text-xs"
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="pt-4 flex items-center justify-between border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setOnboardingStep(1)}
+                    className="inline-flex items-center gap-1 px-4 py-2 text-sm text-slate-600 hover:text-slate-800"
+                  >
+                    <ArrowLeft size={16} />
+                    <span>Back to Details</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleFinalSave}
+                    disabled={submitting}
+                    className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold shadow-sm disabled:opacity-50"
+                  >
+                    {submitting ? 'Enrolling...' : 'Confirm & Enroll Student'}
+                  </button>
+                </div>
               </div>
-            </form>
+            )}
           </div>
         </div>
       )}
