@@ -8,6 +8,8 @@ import { env } from './config/env.js';
 import healthRoutes from './routes/health.routes.js';
 import authRoutes from './routes/auth.routes.js';
 import teacherRoutes from './routes/teacher.routes.js';
+import studentRoutes from './routes/student.routes.js';
+import feeRoutes from './routes/fee.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
@@ -48,6 +50,8 @@ if (env.NODE_ENV === 'development') {
 app.use('/api', healthRoutes);
 app.use('/api', authRoutes);
 app.use('/api', teacherRoutes);
+app.use('/api', studentRoutes);
+app.use('/api', feeRoutes);
 
 // Error handling
 app.use(errorHandler);

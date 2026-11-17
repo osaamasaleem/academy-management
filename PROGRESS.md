@@ -74,11 +74,29 @@ Repository: https://github.com/osaamasaleem/academy-management.git
 
 ---
 
-## Phase 3: Student Onboarding & Monthly Fee Ledger (Pending)
-- [ ] Student CRUD & auto roll number generation
-- [ ] Billing period & due-date clamping engine
-- [ ] Monthly fee sheet with implicit unpaid rows
-- [ ] Fee recording & payment reversal (Admin only)
+## Phase 3: Student Onboarding & Monthly Fee Ledger (Completed)
+- **Status:** Complete
+- **Date:** 2026-11-17
+- **Key Deliverables:**
+  - Billing Engine (`backend/src/services/billing.js`):
+    - Due-date clamping for 28/29/30/31-day months (e.g. Feb 31 -> Feb 28/29).
+    - Pakistan calendar timezone (`Asia/Karachi`) overdue computation.
+    - Pre-admission date period validation.
+  - Student CRUD API (`backend/src/routes/student.routes.js`):
+    - Auto sequence roll number assignment (`STU-00001`) with duplicate protection (409).
+    - Filtering by Grade (1–12), Stream (General, Science, ICS, Arts), and active/archived status.
+    - Soft archive on deletion (`status = 'inactive'`) preserving relational history.
+  - Fee Ledger API (`backend/src/routes/fee.routes.js`):
+    - `GET /api/fees`: Monthly fee sheet generating implicit unpaid rows for all active students enrolled on/before the period.
+    - `GET /api/fees/summary`: Aggregate metrics (expected collection, collected, pending, overdue amount, and defaulter counts).
+    - `GET /api/fees/student/:id`: Lifetime ledger series from student admission month to current date.
+    - `POST /api/fees/record`: Full payment recording, fee snapshot rule preservation (BR-4), and admin-only payment reversal (revert back to unpaid).
+  - Frontend UI:
+    - `Students.jsx`: Student directory with grade/stream filters, search, enrollment modal with custom fee due days and fee notes, edit modal, and archive/restore toggles.
+    - `FeeManagement.jsx`: Monthly fee collection dashboard, KPI metric cards, one-click "Mark Paid" modal, admin payment revert button, and student lifetime ledger link.
+    - `StudentFeeHistory.jsx`: Complete chronological ledger timeline for individual students with outstanding balance calculation.
+  - Automated DoD test suite (`backend/tests/phase3_students_fees.test.js`): 10/10 tests passed.
+  - Updated `README.md` with current architecture and testing instructions.
 
 ---
 
