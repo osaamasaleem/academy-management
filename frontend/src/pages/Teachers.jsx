@@ -9,6 +9,8 @@ import {
   Archive,
   RefreshCw,
   AlertCircle,
+  Edit2,
+  KeyRound,
   X
 } from 'lucide-react';
 
@@ -17,13 +19,14 @@ export default function Teachers() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [modalOpen, setModalOpen] = useState(false);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
   // New teacher form state
-  const [formData, setFormData] = useState({
+  const [createForm, setCreateForm] = useState({
     full_name: '',
     username: '',
     password: '',
@@ -37,6 +40,18 @@ export default function Teachers() {
       can_mark_all_attendance: false,
       can_manage_fees: false
     }
+  });
+
+  // Edit teacher form state
+  const [editingTeacherId, setEditingTeacherId] = useState(null);
+  const [editForm, setEditForm] = useState({
+    full_name: '',
+    username: '',
+    phone: '',
+    cnic: '',
+    subject_specialty: '',
+    joining_date: '',
+    new_password: ''
   });
 
   const fetchTeachers = useCallback(async () => {
@@ -62,8 +77,12 @@ export default function Teachers() {
     return () => clearTimeout(timer);
   }, [fetchTeachers]);
 
+  const showToast = (msg) => {
+    setSuccessMsg(msg);
+    setTimeout(() => setSuccessMsg(''), 3000);
+  };
+
   const handleTogglePermission = async (teacherId, flag, currentValue) => {
-    // Optimistic update
     setTeachers((prev) =>
       prev.map((t) => (t.id === teacherId ? { ...t, [flag]: !currentValue } : t))
     );
@@ -72,7 +91,6 @@ export default function Teachers() {
       await apiClient.patch(`/teachers/${teacherId}`, { [flag]: !currentValue });
       showToast('Permissions updated');
     } catch (err) {
-      // Rollback on failure
       setTeachers((prev) =>
         prev.map((t) => (t.id === teacherId ? { ...t, [flag]: currentValue } : t))
       );
@@ -102,9 +120,61 @@ export default function Teachers() {
     }
   };
 
-  const showToast = (msg) => {
-    setSuccessMsg(msg);
-    setTimeout(() => setSuccessMsg(''), 3000);
+  const openEditModal = async (teacher) => {
+    setError('');
+    setEditingTeacherId(teacher.id);
+    try {
+      // Fetch single teacher profile with unmasked CNIC
+      const res = await apiClient.get(`/teachers/${teacher.id}`);
+      const data = res.data.data;
+      setEditForm({
+        full_name: data.full_name || '',
+        username: data.username || '',
+        phone: data.phone || '',
+        cnic: data.cnic || '',
+        subject_specialty: data.subject_specialty || '',
+        joining_date: data.joining_date ? data.joining_date.split('T')[0] : '',
+        new_password: ''
+      });
+      setEditModalOpen(true);
+    } catch (err) {
+      setError(err?.message || 'Failed to load teacher details');
+    }
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSubmitting(true);
+
+    try {
+      const payload = {
+        full_name: editForm.full_name.trim(),
+        username: editForm.username.trim(),
+        phone: editForm.phone.trim(),
+        cnic: editForm.cnic ? editForm.cnic.trim() : null,
+        subject_specialty: editForm.subject_specialty ? editForm.subject_specialty.trim() : null,
+        joining_date: editForm.joining_date || undefined
+      };
+
+      if (editForm.new_password) {
+        if (editForm.new_password.length < 8) {
+          setError('New password must be at least 8 characters long');
+          setSubmitting(false);
+          return;
+        }
+        payload.password = editForm.new_password;
+      }
+
+      await apiClient.patch(`/teachers/${editingTeacherId}`, payload);
+      setEditModalOpen(false);
+      showToast('Teacher details updated successfully');
+      fetchTeachers();
+    } catch (err) {
+      setError(err?.message || 'Failed to update teacher');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleCreateSubmit = async (e) => {
@@ -113,10 +183,10 @@ export default function Teachers() {
     setSubmitting(true);
 
     try {
-      await apiClient.post('/teachers', formData);
-      setModalOpen(false);
+      await apiClient.post('/teachers', createForm);
+      setCreateModalOpen(false);
       showToast('Teacher onboarded successfully');
-      setFormData({
+      setCreateForm({
         full_name: '',
         username: '',
         password: '',
@@ -148,11 +218,11 @@ export default function Teachers() {
             <Users className="text-indigo-600" /> Teacher Directory & RBAC
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Manage teaching staff and toggle granular delegations in real-time.
+            Manage teacher profiles, reset credentials, and delegate granular permissions.
           </p>
         </div>
         <button
-          onClick={() => setModalOpen(true)}
+          onClick={() => setCreateModalOpen(true)}
           className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold shadow-sm transition"
         >
           <UserPlus size={18} />
@@ -288,26 +358,37 @@ export default function Teachers() {
                       />
                     </td>
 
+                    {/* Actions: Edit & Archive/Restore */}
                     <td className="py-3.5 px-4 text-right">
-                      <button
-                        onClick={() => handleToggleStatus(t)}
-                        title={t.is_active ? 'Archive Teacher' : 'Restore Teacher'}
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg border transition ${
-                          t.is_active
-                            ? 'text-amber-700 border-amber-300 hover:bg-amber-50'
-                            : 'text-emerald-700 border-emerald-300 hover:bg-emerald-50'
-                        }`}
-                      >
-                        {t.is_active ? (
-                          <>
-                            <Archive size={14} /> <span>Archive</span>
-                          </>
-                        ) : (
-                          <>
-                            <RefreshCw size={14} /> <span>Restore</span>
-                          </>
-                        )}
-                      </button>
+                      <div className="inline-flex items-center gap-1.5">
+                        <button
+                          onClick={() => openEditModal(t)}
+                          title="Edit Profile & Password"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 transition"
+                        >
+                          <Edit2 size={13} />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          onClick={() => handleToggleStatus(t)}
+                          title={t.is_active ? 'Archive Teacher' : 'Restore Teacher'}
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border transition ${
+                            t.is_active
+                              ? 'text-amber-700 border-amber-300 hover:bg-amber-50'
+                              : 'text-emerald-700 border-emerald-300 hover:bg-emerald-50'
+                          }`}
+                        >
+                          {t.is_active ? (
+                            <>
+                              <Archive size={13} /> <span>Archive</span>
+                            </>
+                          ) : (
+                            <>
+                              <RefreshCw size={13} /> <span>Restore</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -318,29 +399,24 @@ export default function Teachers() {
       </div>
 
       {/* Onboard Teacher Modal */}
-      {modalOpen && (
+      {createModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg border border-slate-200 overflow-hidden max-h-[90vh] flex flex-col">
             <div className="bg-indigo-600 px-6 py-4 text-white flex items-center justify-between">
               <h2 className="text-lg font-bold">Onboard New Teacher</h2>
-              <button
-                onClick={() => setModalOpen(false)}
-                className="text-indigo-200 hover:text-white"
-              >
+              <button onClick={() => setCreateModalOpen(false)} className="text-indigo-200 hover:text-white">
                 <X size={20} />
               </button>
             </div>
 
             <form onSubmit={handleCreateSubmit} className="p-6 space-y-4 overflow-y-auto">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Full Name *
-                </label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Full Name *</label>
                 <input
                   type="text"
                   required
-                  value={formData.full_name}
-                  onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                  value={createForm.full_name}
+                  onChange={(e) => setCreateForm({ ...createForm, full_name: e.target.value })}
                   className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                   placeholder="e.g. Ahmad Khan"
                 />
@@ -348,27 +424,23 @@ export default function Teachers() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Username *
-                  </label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Username *</label>
                   <input
                     type="text"
                     required
-                    value={formData.username}
-                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                    value={createForm.username}
+                    onChange={(e) => setCreateForm({ ...createForm, username: e.target.value })}
                     className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                     placeholder="ahmad.k"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Password *
-                  </label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Password *</label>
                   <input
                     type="password"
                     required
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    value={createForm.password}
+                    onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
                     className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                     placeholder="Min 8 characters"
                   />
@@ -377,26 +449,22 @@ export default function Teachers() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Phone *
-                  </label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Phone *</label>
                   <input
                     type="text"
                     required
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    value={createForm.phone}
+                    onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
                     className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                     placeholder="03001234567"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    CNIC (13 digits, optional)
-                  </label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">CNIC (13 digits)</label>
                   <input
                     type="text"
-                    value={formData.cnic}
-                    onChange={(e) => setFormData({ ...formData, cnic: e.target.value })}
+                    value={createForm.cnic}
+                    onChange={(e) => setCreateForm({ ...createForm, cnic: e.target.value })}
                     className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                     placeholder="3520112345671"
                   />
@@ -405,25 +473,21 @@ export default function Teachers() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Subject Specialty
-                  </label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Subject Specialty</label>
                   <input
                     type="text"
-                    value={formData.subject_specialty}
-                    onChange={(e) => setFormData({ ...formData, subject_specialty: e.target.value })}
+                    value={createForm.subject_specialty}
+                    onChange={(e) => setCreateForm({ ...createForm, subject_specialty: e.target.value })}
                     className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                     placeholder="e.g. Physics / Math"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Joining Date
-                  </label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Joining Date</label>
                   <input
                     type="date"
-                    value={formData.joining_date}
-                    onChange={(e) => setFormData({ ...formData, joining_date: e.target.value })}
+                    value={createForm.joining_date}
+                    onChange={(e) => setCreateForm({ ...createForm, joining_date: e.target.value })}
                     className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
@@ -437,11 +501,11 @@ export default function Teachers() {
                   <label className="flex items-center gap-2.5 text-xs text-slate-700 cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={formData.permissions.can_view_students}
+                      checked={createForm.permissions.can_view_students}
                       onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          permissions: { ...formData.permissions, can_view_students: e.target.checked }
+                        setCreateForm({
+                          ...createForm,
+                          permissions: { ...createForm.permissions, can_view_students: e.target.checked }
                         })
                       }
                       className="rounded text-indigo-600 focus:ring-indigo-500"
@@ -451,11 +515,11 @@ export default function Teachers() {
                   <label className="flex items-center gap-2.5 text-xs text-slate-700 cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={formData.permissions.can_manage_students}
+                      checked={createForm.permissions.can_manage_students}
                       onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          permissions: { ...formData.permissions, can_manage_students: e.target.checked }
+                        setCreateForm({
+                          ...createForm,
+                          permissions: { ...createForm.permissions, can_manage_students: e.target.checked }
                         })
                       }
                       className="rounded text-indigo-600 focus:ring-indigo-500"
@@ -465,11 +529,11 @@ export default function Teachers() {
                   <label className="flex items-center gap-2.5 text-xs text-slate-700 cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={formData.permissions.can_manage_fees}
+                      checked={createForm.permissions.can_manage_fees}
                       onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          permissions: { ...formData.permissions, can_manage_fees: e.target.checked }
+                        setCreateForm({
+                          ...createForm,
+                          permissions: { ...createForm.permissions, can_manage_fees: e.target.checked }
                         })
                       }
                       className="rounded text-indigo-600 focus:ring-indigo-500"
@@ -479,11 +543,11 @@ export default function Teachers() {
                   <label className="flex items-center gap-2.5 text-xs text-slate-700 cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={formData.permissions.can_mark_all_attendance}
+                      checked={createForm.permissions.can_mark_all_attendance}
                       onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          permissions: { ...formData.permissions, can_mark_all_attendance: e.target.checked }
+                        setCreateForm({
+                          ...createForm,
+                          permissions: { ...createForm.permissions, can_mark_all_attendance: e.target.checked }
                         })
                       }
                       className="rounded text-indigo-600 focus:ring-indigo-500"
@@ -496,7 +560,7 @@ export default function Teachers() {
               <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setModalOpen(false)}
+                  onClick={() => setCreateModalOpen(false)}
                   className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800"
                 >
                   Cancel
@@ -507,6 +571,123 @@ export default function Teachers() {
                   className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold shadow-sm disabled:opacity-50"
                 >
                   {submitting ? 'Onboarding...' : 'Onboard Teacher'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Teacher & Reset Password Modal */}
+      {editModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg border border-slate-200 overflow-hidden max-h-[90vh] flex flex-col">
+            <div className="bg-slate-900 px-6 py-4 text-white flex items-center justify-between">
+              <h2 className="text-lg font-bold flex items-center gap-2">
+                <Edit2 size={18} /> Edit Teacher Profile
+              </h2>
+              <button onClick={() => setEditModalOpen(false)} className="text-slate-400 hover:text-white">
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditSubmit} className="p-6 space-y-4 overflow-y-auto">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Full Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editForm.full_name}
+                  onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Username *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.username}
+                    onChange={(e) => setEditForm({ ...editForm, username: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Phone *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.phone}
+                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">CNIC (13 digits)</label>
+                  <input
+                    type="text"
+                    value={editForm.cnic}
+                    onChange={(e) => setEditForm({ ...editForm, cnic: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Subject Specialty</label>
+                  <input
+                    type="text"
+                    value={editForm.subject_specialty}
+                    onChange={(e) => setEditForm({ ...editForm, subject_specialty: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Joining Date</label>
+                <input
+                  type="date"
+                  value={editForm.joining_date}
+                  onChange={(e) => setEditForm({ ...editForm, joining_date: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              {/* Password Reset Section */}
+              <div className="pt-3 border-t border-slate-200 bg-slate-50 p-3 rounded-xl border">
+                <label className="flex items-center gap-1.5 text-xs font-bold text-slate-800 uppercase tracking-wider mb-1">
+                  <KeyRound size={14} className="text-amber-600" /> Reset Teacher Password
+                </label>
+                <p className="text-xs text-slate-500 mb-2">
+                  Leave blank to keep the current password. If entered, the teacher will be logged out everywhere and must use this new password.
+                </p>
+                <input
+                  type="password"
+                  value={editForm.new_password}
+                  onChange={(e) => setEditForm({ ...editForm, new_password: e.target.value })}
+                  placeholder="Enter new password (min 8 characters)"
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white"
+                />
+              </div>
+
+              <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditModalOpen(false)}
+                  className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-sm font-semibold shadow-sm disabled:opacity-50"
+                >
+                  {submitting ? 'Saving Changes...' : 'Save Changes'}
                 </button>
               </div>
             </form>

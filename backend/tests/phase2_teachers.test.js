@@ -19,7 +19,9 @@ async function runPhase2Tests() {
     const adminCookie = adminLoginRes.headers.get('set-cookie');
 
     // 2. Create teacher
-    const testUsername = `test.teacher.${Date.now()}`;
+    const timestamp = Date.now().toString();
+    const testUsername = `test.teacher.${timestamp.slice(-6)}`;
+    const testCnic = `35201${timestamp.slice(-8)}`;
     const createRes = await fetch(`${baseUrl}/teachers`, {
       method: 'POST',
       headers: {
@@ -31,7 +33,7 @@ async function runPhase2Tests() {
         username: testUsername,
         password: 'TeacherPassword123!',
         phone: '03009876543',
-        cnic: '3520199999999',
+        cnic: testCnic,
         subject_specialty: 'Mathematics',
         permissions: {
           can_view_students: false,
@@ -144,6 +146,36 @@ async function runPhase2Tests() {
     });
     assert.strictEqual(archiveAdminRes.status, 403, 'Admin account cannot be archived');
     console.log('✓ Test 8: Protection rule prevented archiving admin account');
+
+    // 13. Admin edits teacher details and resets their password
+    const newResetPassword = 'BrandNewPassword789!';
+    const updatedUsername = `${testUsername}.edit`;
+    const editTeacherRes = await fetch(`${baseUrl}/teachers/${teacherId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: adminCookie
+      },
+      body: JSON.stringify({
+        username: updatedUsername,
+        full_name: 'Updated Name by Admin',
+        password: newResetPassword,
+        is_active: true
+      })
+    });
+    assert.strictEqual(editTeacherRes.status, 200);
+    const editedTeacherData = await editTeacherRes.json();
+    assert.strictEqual(editedTeacherData.data.username, updatedUsername);
+    console.log('✓ Test 9: Admin edited teacher profile and updated username');
+
+    // 14. Verify teacher logs in with the newly reset password
+    const newLoginRes = await fetch(`${baseUrl}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: updatedUsername, password: newResetPassword })
+    });
+    assert.strictEqual(newLoginRes.status, 200, 'Teacher must be able to log in with new reset password');
+    console.log('✓ Test 10: Teacher successfully logged in with admin-reset password');
 
     console.log('\nAll Phase 2 Teacher Management tests passed successfully!');
   } finally {

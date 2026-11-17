@@ -30,6 +30,7 @@ const createTeacherSchema = z.object({
 
 const updateTeacherSchema = z.object({
   full_name: z.string().min(1).max(120).optional(),
+  username: z.string().min(1).max(80).optional(),
   phone: z.string().min(1).max(25).optional(),
   cnic: z.string().regex(/^[0-9]{13}$/, 'CNIC must be 13 digits').optional().nullable().or(z.literal('')),
   subject_specialty: z.string().max(100).optional().nullable().or(z.literal('')),
@@ -236,6 +237,15 @@ router.patch('/teachers/:id', async (req, res, next) => {
 
     const parsed = updateTeacherSchema.parse(req.body);
 
+    if (parsed.username && parsed.username.toLowerCase() !== targetUser.username.toLowerCase()) {
+      const existingUser = await pool.query('SELECT id FROM users WHERE LOWER(username) = LOWER($1) AND id != $2', [parsed.username.trim(), teacherId]);
+      if (existingUser.rows.length > 0) {
+        return res.status(409).json({
+          error: { code: 'USERNAME_TAKEN', message: 'Username is already taken by another user' }
+        });
+      }
+    }
+
     if (parsed.cnic && parsed.cnic !== targetUser.cnic) {
       const existingCnic = await pool.query('SELECT id FROM users WHERE cnic = $1 AND id != $2', [parsed.cnic, teacherId]);
       if (existingCnic.rows.length > 0) {
@@ -250,6 +260,7 @@ router.patch('/teachers/:id', async (req, res, next) => {
 
     const fieldMap = {
       full_name: parsed.full_name,
+      username: parsed.username ? parsed.username.trim() : undefined,
       phone: parsed.phone,
       cnic: parsed.cnic === '' ? null : parsed.cnic,
       subject_specialty: parsed.subject_specialty === '' ? null : parsed.subject_specialty,
