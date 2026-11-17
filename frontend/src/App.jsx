@@ -5,6 +5,7 @@ import Layout from './components/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import ChangePassword from './pages/ChangePassword';
+import Teachers from './pages/Teachers';
 
 export default function App() {
   return (
@@ -19,7 +20,7 @@ export default function App() {
               <Route path="/change-password" element={<ChangePassword />} />
               
               {/* Upcoming phases routes */}
-              <Route path="/teachers" element={<div className="bg-white p-6 rounded-xl border border-slate-200"><h2 className="text-xl font-bold">Teachers Management (Phase 2)</h2></div>} />
+              <Route path="/teachers" element={<Teachers />} />
               <Route path="/students" element={<div className="bg-white p-6 rounded-xl border border-slate-200"><h2 className="text-xl font-bold">Students Management (Phase 3)</h2></div>} />
               <Route path="/fees" element={<div className="bg-white p-6 rounded-xl border border-slate-200"><h2 className="text-xl font-bold">Fee Ledger (Phase 3)</h2></div>} />
               <Route path="/attendance" element={<div className="bg-white p-6 rounded-xl border border-slate-200"><h2 className="text-xl font-bold">Teacher Attendance (Phase 4)</h2></div>} />

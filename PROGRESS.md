@@ -54,10 +54,22 @@ Repository: https://github.com/osaamasaleem/academy-management.git
 
 ---
 
-## Phase 2: Teacher Management & Granular Permissions (Pending)
-- [ ] CRUD endpoints for teachers
-- [ ] Permission toggles (`can_view_students`, `can_manage_students`, `can_manage_fees`, `can_mark_all_attendance`)
-- [ ] UI for teachers with live toggles
+## Phase 2: Teacher Management & Granular Permissions (Completed)
+- **Status:** Complete
+- **Date:** 2026-11-17
+- **Key Deliverables:**
+  - Teacher CRUD endpoints (`backend/src/routes/teacher.routes.js`):
+    - `GET /api/teachers`: Search, pagination, status filter, CNIC masking (`*********1234`).
+    - `GET /api/teachers/:id`: Detailed profile with unmasked CNIC for admin.
+    - `POST /api/teachers`: Role forced to `teacher`, duplicate username (case-insensitive) & CNIC check, audit logged.
+    - `PATCH /api/teachers/:id`: Strict whitelist, role escalation protection (403), password reset with token_version bump, audit logged.
+    - `DELETE /api/teachers/:id`: Soft archive (`is_active = FALSE`), admin protection safeguard.
+  - Frontend UI (`frontend/src/pages/Teachers.jsx`):
+    - Full-featured teacher directory with search and active/archived filter.
+    - Real-time instant toggle switches for the 4 permission flags (`can_view_students`, `can_manage_students`, `can_manage_fees`, `can_mark_all_attendance`) with optimistic UI and rollback.
+    - Teacher onboarding modal with compulsory and optional fields.
+    - One-click archive & restore actions with confirmation alerts.
+  - Automated DoD test suite (`backend/tests/phase2_teachers.test.js`): 8/8 tests passed.
 
 ---
 
