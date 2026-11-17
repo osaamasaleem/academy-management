@@ -25,6 +25,7 @@ export default function FeeManagement() {
   const [year, setYear] = useState(today.getFullYear());
   const [gradeFilter, setGradeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [studentStatusFilter, setStudentStatusFilter] = useState('active');
   const [search, setSearch] = useState('');
 
   const [feeSheet, setFeeSheet] = useState([]);
@@ -53,11 +54,12 @@ export default function FeeManagement() {
       const params = { month, year };
       if (gradeFilter) params.grade = gradeFilter;
       if (statusFilter) params.status = statusFilter;
+      if (studentStatusFilter) params.student_status = studentStatusFilter;
       if (search) params.search = search;
 
       const [sheetRes, summaryRes] = await Promise.all([
         apiClient.get('/fees', { params }),
-        apiClient.get('/fees/summary', { params: { month, year, grade: gradeFilter || undefined } })
+        apiClient.get('/fees/summary', { params: { month, year, grade: gradeFilter || undefined, student_status: studentStatusFilter } })
       ]);
 
       setFeeSheet(sheetRes.data.data);
@@ -67,7 +69,7 @@ export default function FeeManagement() {
     } finally {
       setLoading(false);
     }
-  }, [month, year, gradeFilter, statusFilter, search]);
+  }, [month, year, gradeFilter, statusFilter, studentStatusFilter, search]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -277,10 +279,20 @@ export default function FeeManagement() {
             onChange={(e) => setStatusFilter(e.target.value)}
             className="px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
           >
-            <option value="">All Statuses</option>
+            <option value="">All Fee Statuses</option>
             <option value="paid">Paid</option>
             <option value="unpaid">Unpaid</option>
             <option value="overdue">Overdue</option>
+          </select>
+
+          <select
+            value={studentStatusFilter}
+            onChange={(e) => setStudentStatusFilter(e.target.value)}
+            className="px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+          >
+            <option value="active">Active Students</option>
+            <option value="inactive">Archived Students</option>
+            <option value="all">All Students</option>
           </select>
         </div>
       </div>
@@ -311,7 +323,14 @@ export default function FeeManagement() {
                 {feeSheet.map((row) => (
                   <tr key={row.student_id} className="hover:bg-slate-50/70 transition">
                     <td className="py-3.5 px-4">
-                      <div className="font-semibold text-slate-900">{row.full_name}</div>
+                      <div className="font-semibold text-slate-900 flex items-center gap-1.5">
+                        <span>{row.full_name}</span>
+                        {row.student_status === 'inactive' && (
+                          <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">
+                            Archived
+                          </span>
+                        )}
+                      </div>
                       <div className="text-xs font-mono font-bold text-indigo-700">{row.roll_no}</div>
                       {row.fee_note && (
                         <div className="text-xs text-amber-700 italic mt-0.5">{row.fee_note}</div>
@@ -328,7 +347,16 @@ export default function FeeManagement() {
                       <div className="text-[11px] text-slate-500 mt-0.5">{row.due_date}</div>
                     </td>
                     <td className="py-3.5 px-4 font-semibold text-slate-900">
-                      PKR {row.fee_amount.toLocaleString()}
+                      <div>PKR {row.fee_amount.toLocaleString()}</div>
+                      <span
+                        className={`inline-block mt-0.5 px-2 py-0.5 rounded text-[11px] font-semibold ${
+                          row.payment_habit === 'month_end'
+                            ? 'bg-purple-100 text-purple-700 border border-purple-200'
+                            : 'bg-teal-100 text-teal-800 border border-teal-200'
+                        }`}
+                      >
+                        {row.payment_habit === 'month_end' ? 'Month End' : 'Advance'}
+                      </span>
                     </td>
                     <td className="py-3.5 px-4">
                       {row.status === 'paid' ? (

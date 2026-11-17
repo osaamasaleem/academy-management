@@ -33,7 +33,8 @@ function formatUserResponse(user) {
       can_view_students: Boolean(user.can_view_students),
       can_manage_students: Boolean(user.can_manage_students),
       can_mark_all_attendance: Boolean(user.can_mark_all_attendance),
-      can_manage_fees: Boolean(user.can_manage_fees)
+      can_manage_fees: Boolean(user.can_manage_fees),
+      can_view_audit_logs: Boolean(user.can_view_audit_logs)
     }
   };
 }

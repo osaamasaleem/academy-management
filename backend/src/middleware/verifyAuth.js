@@ -14,7 +14,8 @@ export async function verifyAuth(req, res, next) {
     const payload = jwt.verify(token, env.JWT_SECRET);
     const { rows } = await pool.query(
       `SELECT id, full_name, username, role, is_active, token_version,
-              can_view_students, can_manage_students, can_mark_all_attendance, can_manage_fees
+              can_view_students, can_manage_students, can_mark_all_attendance, can_manage_fees,
+              can_view_audit_logs
        FROM users WHERE id = $1`,
       [payload.sub]
     );

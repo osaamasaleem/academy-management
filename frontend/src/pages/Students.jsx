@@ -53,6 +53,7 @@ export default function Students() {
     monthly_fee: 3000,
     fee_due_day: 1,
     fee_note: '',
+    payment_habit: 'advance',
     admission_date: new Date().toISOString().split('T')[0]
   };
 
@@ -121,6 +122,7 @@ export default function Students() {
       monthly_fee: student.monthly_fee,
       fee_due_day: student.fee_due_day,
       fee_note: student.fee_note || '',
+      payment_habit: student.payment_habit || 'advance',
       admission_date: student.admission_date ? student.admission_date.split('T')[0] : ''
     });
     setModalOpen(true);
@@ -385,8 +387,19 @@ export default function Students() {
                       <div className="font-semibold text-slate-900">
                         PKR {parseFloat(s.monthly_fee).toLocaleString()}
                       </div>
-                      <div className="inline-block mt-0.5 px-2 py-0.5 rounded text-[11px] font-semibold bg-indigo-50 text-indigo-700">
-                        Due: {s.fee_due_day === 1 ? '1st' : `${s.fee_due_day}th`}
+                      <div className="flex flex-wrap items-center gap-1 mt-0.5">
+                        <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold bg-indigo-50 text-indigo-700">
+                          Due: {s.fee_due_day === 1 ? '1st' : `${s.fee_due_day}th`}
+                        </span>
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold ${
+                            s.payment_habit === 'month_end'
+                              ? 'bg-purple-100 text-purple-700 border border-purple-200'
+                              : 'bg-teal-100 text-teal-800 border border-teal-200'
+                          }`}
+                        >
+                          {s.payment_habit === 'month_end' ? 'Month End' : 'Advance'}
+                        </span>
                       </div>
                     </td>
                     <td className="py-3.5 px-4">
@@ -577,6 +590,17 @@ export default function Students() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Payment Habit *</label>
+                    <select
+                      value={formData.payment_habit}
+                      onChange={(e) => setFormData({ ...formData, payment_habit: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white"
+                    >
+                      <option value="advance">Advance</option>
+                      <option value="month_end">Month End</option>
+                    </select>
+                  </div>
+                  <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Admission Date *</label>
                     <input
                       type="date"
@@ -586,16 +610,17 @@ export default function Students() {
                       className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Fee Note / Remarks</label>
-                    <input
-                      type="text"
-                      value={formData.fee_note}
-                      onChange={(e) => setFormData({ ...formData, fee_note: e.target.value })}
-                      placeholder="e.g. 500 discount sibling concession"
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Fee Note / Remarks</label>
+                  <input
+                    type="text"
+                    value={formData.fee_note}
+                    onChange={(e) => setFormData({ ...formData, fee_note: e.target.value })}
+                    placeholder="e.g. 500 discount sibling concession"
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  />
                 </div>
 
                 <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-100">

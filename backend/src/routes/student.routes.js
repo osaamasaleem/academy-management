@@ -25,6 +25,7 @@ const createStudentSchema = z.object({
   monthly_fee: z.coerce.number().min(0, 'Monthly fee cannot be negative'),
   fee_due_day: z.coerce.number().int().min(1).max(31).default(1),
   fee_note: z.string().max(255).optional().nullable(),
+  payment_habit: z.enum(['advance', 'month_end']).default('advance'),
   admission_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Admission date must be YYYY-MM-DD').optional(),
   roll_no: z.string().max(30).optional().nullable().or(z.literal('')),
   initial_fee_history: z.array(initialFeeRowSchema).optional()
@@ -39,6 +40,7 @@ const updateStudentSchema = z.object({
   monthly_fee: z.coerce.number().min(0).optional(),
   fee_due_day: z.coerce.number().int().min(1).max(31).optional(),
   fee_note: z.string().max(255).optional().nullable(),
+  payment_habit: z.enum(['advance', 'month_end']).optional(),
   admission_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   roll_no: z.string().min(1).max(30).optional(),
   status: z.enum(['Active', 'Left', 'active', 'inactive']).optional()
@@ -108,7 +110,7 @@ router.get(
 
       const dataQuery = `
         SELECT id, roll_no, full_name, guardian_name, guardian_phone, grade, stream,
-               monthly_fee, fee_due_day, fee_note, admission_date, status, enrollment_history,
+               monthly_fee, fee_due_day, payment_habit, fee_note, admission_date, status, enrollment_history,
                created_by, created_at, updated_at
         FROM students
         ${whereClause}
@@ -192,9 +194,9 @@ router.post(
         insertQuery = `
           INSERT INTO students (
             roll_no, full_name, guardian_name, guardian_phone, grade, stream,
-            monthly_fee, fee_due_day, fee_note, admission_date, status, enrollment_history, created_by
+            monthly_fee, fee_due_day, fee_note, payment_habit, admission_date, status, enrollment_history, created_by
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::date, 'Active', $11::jsonb, $12)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::date, 'Active', $12::jsonb, $13)
           RETURNING *;
         `;
         values = [
@@ -207,6 +209,7 @@ router.post(
           parsed.monthly_fee,
           parsed.fee_due_day,
           parsed.fee_note ? parsed.fee_note.trim() : null,
+          parsed.payment_habit,
           admDate,
           initialEnrollment,
           req.user.id
@@ -215,9 +218,9 @@ router.post(
         insertQuery = `
           INSERT INTO students (
             full_name, guardian_name, guardian_phone, grade, stream,
-            monthly_fee, fee_due_day, fee_note, admission_date, status, enrollment_history, created_by
+            monthly_fee, fee_due_day, fee_note, payment_habit, admission_date, status, enrollment_history, created_by
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::date, 'Active', $10::jsonb, $11)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::date, 'Active', $11::jsonb, $12)
           RETURNING *;
         `;
         values = [
@@ -229,6 +232,7 @@ router.post(
           parsed.monthly_fee,
           parsed.fee_due_day,
           parsed.fee_note ? parsed.fee_note.trim() : null,
+          parsed.payment_habit,
           admDate,
           initialEnrollment,
           req.user.id
@@ -462,7 +466,7 @@ router.patch(
 
       const fields = [
         'full_name', 'guardian_name', 'guardian_phone', 'grade', 'stream',
-        'monthly_fee', 'fee_due_day', 'fee_note', 'admission_date', 'roll_no', 'status'
+        'monthly_fee', 'fee_due_day', 'fee_note', 'payment_habit', 'admission_date', 'roll_no', 'status'
       ];
 
       for (const field of fields) {
@@ -508,34 +512,56 @@ router.delete(
   verifyAuth,
   requirePermission('can_manage_students'),
   async (req, res, next) => {
+    const client = await pool.connect();
     try {
       const studentId = parseInt(req.params.id, 10);
       if (isNaN(studentId)) {
         return res.status(400).json({ error: { code: 'INVALID_ID', message: 'Invalid student ID' } });
       }
 
-      const { rows } = await pool.query('UPDATE students SET status = $1 WHERE id = $2 RETURNING id, full_name, status', ['inactive', studentId]);
+      await client.query('BEGIN');
+
+      const { rows } = await client.query(
+        'UPDATE students SET status = $1 WHERE id = $2 RETURNING id, full_name, status',
+        ['inactive', studentId]
+      );
       if (rows.length === 0) {
+        await client.query('ROLLBACK');
         return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Student not found' } });
       }
+
+      // Clean up future or current unpaid fee records so archived students do not leave ghost pending debt
+      const deleteUnpaidRes = await client.query(
+        `DELETE FROM fee_records
+         WHERE student_id = $1
+           AND status = 'unpaid'
+         RETURNING id;`,
+        [studentId]
+      );
+
+      await client.query('COMMIT');
 
       await logAudit({
         actorId: req.user.id,
         action: 'student.archive',
         entityType: 'student',
         entityId: studentId,
-        details: { message: 'Student archived' }
+        details: { message: 'Student archived', unpaid_fees_removed: deleteUnpaidRes.rowCount }
       });
 
       res.status(200).json({
         data: {
           id: studentId,
           status: 'inactive',
+          unpaid_fees_removed: deleteUnpaidRes.rowCount,
           message: 'Student archived successfully'
         }
       });
     } catch (error) {
+      await client.query('ROLLBACK');
       next(error);
+    } finally {
+      client.release();
     }
   }
 );

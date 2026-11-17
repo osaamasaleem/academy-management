@@ -47,6 +47,7 @@ router.get('/fees', async (req, res, next) => {
     const grade = req.query.grade ? parseInt(req.query.grade, 10) : null;
     const statusFilter = req.query.status ? req.query.status.toLowerCase() : null;
     const search = req.query.search ? req.query.search.trim() : '';
+    const studentStatusFilter = req.query.student_status ? req.query.student_status.toLowerCase() : 'active';
 
     let extraConditions = [];
     let params = [month, year];
@@ -61,11 +62,21 @@ router.get('/fees', async (req, res, next) => {
       extraConditions.push(`(s.full_name ILIKE $${params.length} OR s.roll_no ILIKE $${params.length})`);
     }
 
+    // Student status filtering:
+    // 'active' (default): only students who are currently active (s.status = 'active')
+    // 'all': all students (active, inactive, Left)
+    // 'inactive': archived students (s.status = 'inactive')
+    if (studentStatusFilter === 'active') {
+      extraConditions.push(`s.status IN ('active', 'Active')`);
+    } else if (studentStatusFilter === 'inactive') {
+      extraConditions.push(`s.status = 'inactive'`);
+    }
+
     const extraWhere = extraConditions.length > 0 ? `AND ${extraConditions.join(' AND ')}` : '';
 
     const query = `
       SELECT s.id AS student_id, s.roll_no, s.full_name, s.grade, s.stream,
-             s.fee_due_day, s.fee_note, s.enrollment_history,
+             s.fee_due_day, s.fee_note, s.payment_habit, s.status AS student_status, s.enrollment_history,
              f.id AS fee_record_id,
              COALESCE(f.fee_amount, s.monthly_fee) AS fee_amount,
              COALESCE(f.status, 'unpaid')          AS status,
@@ -77,8 +88,7 @@ router.get('/fees', async (req, res, next) => {
       FROM students s
       LEFT JOIN fee_records f
              ON f.student_id = s.id AND f.billing_month = $1 AND f.billing_year = $2
-      WHERE (s.status IN ('active', 'Active') OR f.id IS NOT NULL)
-        AND s.admission_date <= (make_date($2, $1, 1) + INTERVAL '1 month - 1 day')::date
+      WHERE s.admission_date <= (make_date($2, $1, 1) + INTERVAL '1 month - 1 day')::date
         ${extraWhere}
       ORDER BY s.grade ASC, s.full_name ASC;
     `;
@@ -103,6 +113,8 @@ router.get('/fees', async (req, res, next) => {
           stream: row.stream,
           fee_due_day: row.fee_due_day,
           fee_note: row.fee_note,
+          payment_habit: row.payment_habit || 'advance',
+          student_status: row.student_status,
           fee_record_id: row.fee_record_id,
           fee_amount: parseFloat(row.fee_amount),
           amount_paid: parseFloat(row.amount_paid),
@@ -148,6 +160,7 @@ router.get('/fees/summary', async (req, res, next) => {
     const month = parseInt(req.query.month, 10) || currentMonth;
     const year = parseInt(req.query.year, 10) || currentYear;
     const grade = req.query.grade ? parseInt(req.query.grade, 10) : null;
+    const studentStatusFilter = req.query.student_status ? req.query.student_status.toLowerCase() : 'active';
 
     let extraConditions = [];
     let params = [month, year];
@@ -155,6 +168,12 @@ router.get('/fees/summary', async (req, res, next) => {
     if (grade) {
       params.push(grade);
       extraConditions.push(`s.grade = $${params.length}`);
+    }
+
+    if (studentStatusFilter === 'active') {
+      extraConditions.push(`s.status IN ('active', 'Active')`);
+    } else if (studentStatusFilter === 'inactive') {
+      extraConditions.push(`s.status = 'inactive'`);
     }
 
     const extraWhere = extraConditions.length > 0 ? `AND ${extraConditions.join(' AND ')}` : '';
@@ -170,8 +189,7 @@ router.get('/fees/summary', async (req, res, next) => {
       FROM students s
       LEFT JOIN fee_records f
              ON f.student_id = s.id AND f.billing_month = $1 AND f.billing_year = $2
-      WHERE (s.status IN ('active', 'Active') OR f.id IS NOT NULL)
-        AND s.admission_date <= (make_date($2, $1, 1) + INTERVAL '1 month - 1 day')::date
+      WHERE s.admission_date <= (make_date($2, $1, 1) + INTERVAL '1 month - 1 day')::date
         ${extraWhere};
     `;
 
@@ -344,6 +362,7 @@ router.get('/fees/student/:id', async (req, res, next) => {
           monthly_fee: parseFloat(student.monthly_fee),
           fee_due_day: student.fee_due_day,
           fee_note: student.fee_note,
+          payment_habit: student.payment_habit || 'advance',
           admission_date: student.admission_date,
           status: student.status,
           enrollment_history: enrollmentHistory

@@ -10,6 +10,8 @@ import authRoutes from './routes/auth.routes.js';
 import teacherRoutes from './routes/teacher.routes.js';
 import studentRoutes from './routes/student.routes.js';
 import feeRoutes from './routes/fee.routes.js';
+import attendanceRoutes from './routes/attendance.routes.js';
+import dashboardRoutes from './routes/dashboard.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
@@ -52,6 +54,8 @@ app.use('/api', authRoutes);
 app.use('/api', teacherRoutes);
 app.use('/api', studentRoutes);
 app.use('/api', feeRoutes);
+app.use('/api', attendanceRoutes);
+app.use('/api', dashboardRoutes);
 
 // Error handling
 app.use(errorHandler);

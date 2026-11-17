@@ -9,6 +9,9 @@ import Teachers from './pages/Teachers';
 import Students from './pages/Students';
 import FeeManagement from './pages/FeeManagement';
 import StudentFeeHistory from './pages/StudentFeeHistory';
+import MarkAttendance from './pages/MarkAttendance';
+import MyAttendance from './pages/MyAttendance';
+import AuditLogs from './pages/AuditLogs';
 
 export default function App() {
   return (
@@ -27,9 +30,9 @@ export default function App() {
               <Route path="/students" element={<Students />} />
               <Route path="/fees" element={<FeeManagement />} />
               <Route path="/fees/student/:id" element={<StudentFeeHistory />} />
-              <Route path="/attendance" element={<div className="bg-white p-6 rounded-xl border border-slate-200"><h2 className="text-xl font-bold">Teacher Attendance (Phase 4)</h2></div>} />
-              <Route path="/my-attendance" element={<div className="bg-white p-6 rounded-xl border border-slate-200"><h2 className="text-xl font-bold">My Attendance (Phase 4)</h2></div>} />
-              <Route path="/audit-logs" element={<div className="bg-white p-6 rounded-xl border border-slate-200"><h2 className="text-xl font-bold">Audit Logs (Phase 4)</h2></div>} />
+              <Route path="/attendance" element={<MarkAttendance />} />
+              <Route path="/my-attendance" element={<MyAttendance />} />
+              <Route path="/audit-logs" element={<AuditLogs />} />
             </Route>
           </Route>
 

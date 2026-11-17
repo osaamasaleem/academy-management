@@ -24,7 +24,8 @@ const createTeacherSchema = z.object({
     can_view_students: z.boolean().optional(),
     can_manage_students: z.boolean().optional(),
     can_mark_all_attendance: z.boolean().optional(),
-    can_manage_fees: z.boolean().optional()
+    can_manage_fees: z.boolean().optional(),
+    can_view_audit_logs: z.boolean().optional()
   }).optional()
 });
 
@@ -41,6 +42,7 @@ const updateTeacherSchema = z.object({
   can_manage_students: z.boolean().optional(),
   can_mark_all_attendance: z.boolean().optional(),
   can_manage_fees: z.boolean().optional(),
+  can_view_audit_logs: z.boolean().optional(),
   role: z.any().optional() // explicitly handled for rejection
 });
 
@@ -80,7 +82,7 @@ router.get('/teachers', async (req, res, next) => {
     const dataQuery = `
       SELECT id, full_name, username, phone, cnic, subject_specialty, joining_date,
              is_active, can_view_students, can_manage_students, can_mark_all_attendance, can_manage_fees,
-             created_at, updated_at
+             can_view_audit_logs, created_at, updated_at
       FROM users
       ${whereClause}
       ORDER BY full_name ASC
@@ -118,7 +120,7 @@ router.get('/teachers/:id', async (req, res, next) => {
     const query = `
       SELECT id, full_name, username, phone, cnic, subject_specialty, joining_date,
              is_active, can_view_students, can_manage_students, can_mark_all_attendance, can_manage_fees,
-             created_at, updated_at
+             can_view_audit_logs, created_at, updated_at
       FROM users
       WHERE id = $1 AND role = 'teacher'
     `;
@@ -165,12 +167,13 @@ router.post('/teachers', async (req, res, next) => {
       INSERT INTO users (
         full_name, username, password_hash, phone, role, cnic,
         subject_specialty, joining_date, is_active,
-        can_view_students, can_manage_students, can_mark_all_attendance, can_manage_fees
+        can_view_students, can_manage_students, can_mark_all_attendance, can_manage_fees,
+        can_view_audit_logs
       )
-      VALUES ($1, $2, $3, $4, 'teacher', $5, $6, COALESCE($7::date, today_pk()), TRUE, $8, $9, $10, $11)
+      VALUES ($1, $2, $3, $4, 'teacher', $5, $6, COALESCE($7::date, today_pk()), TRUE, $8, $9, $10, $11, $12)
       RETURNING id, full_name, username, phone, cnic, subject_specialty, joining_date,
                 is_active, can_view_students, can_manage_students, can_mark_all_attendance, can_manage_fees,
-                created_at;
+                can_view_audit_logs, created_at;
     `;
 
     const values = [
@@ -184,7 +187,8 @@ router.post('/teachers', async (req, res, next) => {
       Boolean(perms.can_view_students),
       Boolean(perms.can_manage_students),
       Boolean(perms.can_mark_all_attendance),
-      Boolean(perms.can_manage_fees)
+      Boolean(perms.can_manage_fees),
+      Boolean(perms.can_view_audit_logs)
     ];
 
     const { rows } = await pool.query(insertQuery, values);
@@ -269,7 +273,8 @@ router.patch('/teachers/:id', async (req, res, next) => {
       can_view_students: parsed.can_view_students,
       can_manage_students: parsed.can_manage_students,
       can_mark_all_attendance: parsed.can_mark_all_attendance,
-      can_manage_fees: parsed.can_manage_fees
+      can_manage_fees: parsed.can_manage_fees,
+      can_view_audit_logs: parsed.can_view_audit_logs
     };
 
     for (const [key, val] of Object.entries(fieldMap)) {
@@ -300,7 +305,7 @@ router.patch('/teachers/:id', async (req, res, next) => {
       WHERE id = $${values.length}
       RETURNING id, full_name, username, phone, cnic, subject_specialty, joining_date,
                 is_active, can_view_students, can_manage_students, can_mark_all_attendance, can_manage_fees,
-                updated_at;
+                can_view_audit_logs, updated_at;
     `;
 
     const { rows } = await pool.query(updateQuery, values);

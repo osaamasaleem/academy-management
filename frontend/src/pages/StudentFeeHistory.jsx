@@ -305,8 +305,23 @@ export default function StudentFeeHistory() {
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-500 mt-1">
-              Roll No: <span className="font-mono font-bold text-indigo-700">{student.roll_no}</span> · Grade {student.grade} ({student.stream}) · Base Fee: PKR {student.monthly_fee.toLocaleString()} · Due: {student.fee_due_day === 1 ? '1st' : `${student.fee_due_day}th`}
+            <p className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-1.5">
+              <span>Roll No: <span className="font-mono font-bold text-indigo-700">{student.roll_no}</span></span>
+              <span>·</span>
+              <span>Grade {student.grade} ({student.stream})</span>
+              <span>·</span>
+              <span>Base Fee: PKR {student.monthly_fee.toLocaleString()}</span>
+              <span>·</span>
+              <span>Due: {student.fee_due_day === 1 ? '1st' : `${student.fee_due_day}th`}</span>
+              <span
+                className={`ml-1 px-2 py-0.5 rounded text-[11px] font-semibold ${
+                  student.payment_habit === 'month_end'
+                    ? 'bg-purple-100 text-purple-700 border border-purple-200'
+                    : 'bg-teal-100 text-teal-800 border border-teal-200'
+                }`}
+              >
+                {student.payment_habit === 'month_end' ? 'Month End' : 'Advance'}
+              </span>
             </p>
           </div>
         </div>

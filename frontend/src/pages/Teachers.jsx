@@ -38,7 +38,8 @@ export default function Teachers() {
       can_view_students: false,
       can_manage_students: false,
       can_mark_all_attendance: false,
-      can_manage_fees: false
+      can_manage_fees: false,
+      can_view_audit_logs: false
     }
   });
 
@@ -291,6 +292,7 @@ export default function Teachers() {
                   <th className="py-3 px-4 text-center">Manage Students</th>
                   <th className="py-3 px-4 text-center">Manage Fees</th>
                   <th className="py-3 px-4 text-center">Mark All Att.</th>
+                  <th className="py-3 px-4 text-center">View Logs</th>
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
@@ -355,6 +357,16 @@ export default function Teachers() {
                         disabled={!t.is_active}
                         onChange={() => handleTogglePermission(t.id, 'can_mark_all_attendance', t.can_mark_all_attendance)}
                         className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer disabled:opacity-40"
+                      />
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <input
+                        type="checkbox"
+                        checked={t.can_view_audit_logs}
+                        disabled={!t.is_active}
+                        onChange={() => handleTogglePermission(t.id, 'can_view_audit_logs', t.can_view_audit_logs)}
+                        className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer disabled:opacity-40"
+                        title="Grant permission to view all audit logs"
                       />
                     </td>
 
@@ -553,6 +565,20 @@ export default function Teachers() {
                       className="rounded text-indigo-600 focus:ring-indigo-500"
                     />
                     <span>Can Mark Attendance for All Teachers</span>
+                  </label>
+                  <label className="flex items-center gap-2.5 text-xs text-slate-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={createForm.permissions.can_view_audit_logs}
+                      onChange={(e) =>
+                        setCreateForm({
+                          ...createForm,
+                          permissions: { ...createForm.permissions, can_view_audit_logs: e.target.checked }
+                        })
+                      }
+                      className="rounded text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span>Can View Audit Logs (Everyone&apos;s activity)</span>
                   </label>
                 </div>
               </div>

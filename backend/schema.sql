@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS students (
   monthly_fee NUMERIC(10, 2) NOT NULL CHECK (monthly_fee >= 0),
   fee_due_day SMALLINT NOT NULL DEFAULT 1 CHECK (fee_due_day BETWEEN 1 AND 31),
   fee_note VARCHAR(255),
+  payment_habit VARCHAR(20) NOT NULL DEFAULT 'advance' CHECK (payment_habit IN ('advance', 'month_end')),
   admission_date DATE NOT NULL DEFAULT today_pk(),
   status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('Active', 'Left', 'active', 'inactive')),
   enrollment_history JSONB NOT NULL DEFAULT '[]',
