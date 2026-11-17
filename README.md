@@ -4,26 +4,34 @@ Internal web platform for Grade 1–12 coaching academy management (Admin & Teac
 
 ---
 
-## Current Build Status (Phase 3b Completed)
+## Current Build Status (Phase 4 Completed)
 
-- **Phase 0: Scaffolding & Proxy** (Complete)
+- **Phase 0: Scaffolding & Proxy** ✅
   - Vite same-origin proxy, Zod environment validation, baseline schema, health checks.
-- **Phase 1: Database & Authentication Core** (Complete)
+- **Phase 1: Database & Authentication Core** ✅
   - Neon PostgreSQL migration, Principal Admin seeding CLI, JWT HttpOnly cookies, RBAC session guards.
-- **Phase 2: Teacher Management & Granular Permissions** (Complete)
-  - Full teacher directory, profile editing, credential reset, instant 4-flag permission delegation toggles.
-- **Phase 3: Student Onboarding & Monthly Fee Ledger** (Complete)
+- **Phase 2: Teacher Management & Granular Permissions** ✅
+  - Full teacher directory, profile editing, credential reset, instant 5-flag permission delegation toggles (including `can_view_audit_logs`).
+- **Phase 3: Student Onboarding & Monthly Fee Ledger** ✅
   - Student enrollment (Grades 1–12), auto roll-number sequences (`STU-00001`), custom due days (1st vs 17th).
   - Due-date clamping (Feb 28/29), overdue computation in Pakistan time (`Asia/Karachi`).
   - Monthly fee sheet with implicit unpaid rows, KPI summaries, one-click payment recording, admin payment reversal, and lifetime student ledgers.
-- **Phase 3b: Fee Ledger Refactor** (Complete)
-  - **Waived status**: mark individual or bulk months as waived (with optional reason); waived rows stay visible but are excluded from outstanding balance and overdue counts.
-  - **Bulk actions with dry-run**: select any combination of months → Set Fee, Mark Paid (with date), or Waive → preview changes before applying. All changes execute in a single transaction; duplicate rows are prevented.
-  - **Active / Left enrollment**: students start `Active`. "Mark as Left" closes the enrollment interval at a chosen month and removes only future unpaid rows (paid rows are never touched). "Return" appends a new open interval — same student record and roll number.
-  - **Gap months** (between Leave and Return): no rows generated; displayed as "Not enrolled" in the ledger; never counted as overdue.
-  - **Onboarding fee history review**: 2-step enrollment flow — after entering details, review/edit all historical months before saving (bulk set fee, mark paid, waive).
-  - All enrollment changes and fee edits are audit logged (who, what changed, before/after).
-- **Phase 4: Teacher Attendance, Dashboard & Audit** (Next)
+- **Phase 3b: Fee Ledger Refactor** ✅
+  - **Waived status**: mark individual or bulk months as waived; waived rows excluded from outstanding balance.
+  - **Bulk actions with dry-run**: select months → Set Fee, Mark Paid, or Waive → preview before applying.
+  - **Active / Left enrollment**: "Mark as Left" closes enrollment interval; "Return" appends new open interval.
+  - **Gap months**: displayed as "Not enrolled"; never counted as overdue.
+  - **Onboarding fee history review**: 2-step enrollment flow with per-row editing.
+  - **Payment Habit tag**: `Advance` or `Month End` tag per student, visible in student list and fee ledger.
+- **Phase 4: Teacher Attendance, Dashboard & Audit** ✅
+  - **Teacher Attendance Marking**: Daily bulk attendance (`present`, `absent`, `late`, `leave`) by admin or delegated teacher. Future dates blocked; delegated teachers limited to today only.
+  - **Self-Mark Attendance**: Any teacher can mark their own attendance for today via `POST /api/attendance/mark-self`.
+  - **Monthly Attendance Summary / Ledger**: Full per-teacher breakdown with day-by-day status matrix, absent/late/leave date lists, and total counts.
+  - **Dashboard**: Role-aware KPI cards — admin sees active students, active teachers, today's attendance summary, and fee metrics; teachers see their own monthly attendance counts and permitted sections.
+  - **Audit Logs**: All sensitive actions (login, password change, permission updates, fee edits, attendance edits to past records, student archive/return) are recorded in `audit_logs`. Admin and teachers with `can_view_audit_logs` permission can browse and filter logs.
+  - **Archived Student Cleanup**: Archiving a student now removes unpaid fee records, preventing ghost pending debt on dashboard and fee ledger.
+  - **Fee Ledger Student Filter**: Fee ledger supports filtering by student status (`Active Students`, `Archived Students`, `All Students`) with an "Archived" badge on archived student rows.
+  - **Responsive UI with Static Sidebar**: Left sidebar is fixed (non-scrolling); right content area scrolls independently. Mobile-responsive with a hamburger menu and slide-in drawer.
 - **Phase 5: Hardening & Deployment** (Pending)
 
 ---
@@ -39,19 +47,55 @@ Internal web platform for Grade 1–12 coaching academy management (Admin & Teac
 │   ├── src/
 │   │   ├── config/            # DB pool & Zod env validation
 │   │   ├── middleware/        # verifyAuth, requirePermission, requireAdmin, rateLimit
-│   │   ├── routes/            # auth, teacher, student, fee, health
+│   │   ├── routes/            # auth, teacher, student, fee, attendance, dashboard, health
 │   │   ├── services/          # billing engine, audit logger
 │   │   └── scripts/           # migrate, seedAdmin, resetAdminPassword
-│   ├── tests/                 # Phase 1, Phase 2, and Phase 3 automated test suites
+│   ├── tests/                 # Phase 1–3b automated test suites
 │   └── schema.sql             # PostgreSQL baseline DDL
 └── frontend/
     ├── src/
     │   ├── api/               # Axios client with proxy & credentials
     │   ├── context/           # AuthContext (live permissions & session)
-    │   ├── components/        # Layout, ProtectedRoute
-    │   └── pages/             # Login, Dashboard, Teachers, Students, FeeManagement, StudentFeeHistory, ChangePassword
+    │   ├── components/        # Layout (static sidebar, mobile drawer), ProtectedRoute
+    │   └── pages/             # Login, Dashboard, Teachers, Students, FeeManagement,
+    │                          # StudentFeeHistory, MarkAttendance, MyAttendance,
+    │                          # AuditLogs, ChangePassword
     └── vite.config.js         # Port 5173 with proxy to port 5000
 ```
+
+---
+
+## API Endpoints Summary
+
+| Method | Route | Access | Description |
+|---|---|---|---|
+| POST | `/api/auth/login` | Public | Login, issues HttpOnly JWT cookie |
+| POST | `/api/auth/logout` | Auth | Clear session cookie |
+| GET | `/api/auth/me` | Auth | Live user profile & permissions |
+| POST | `/api/auth/change-password` | Auth | Change own password |
+| GET | `/api/teachers` | Admin | List teachers with search & filter |
+| POST | `/api/teachers` | Admin | Create teacher |
+| PATCH | `/api/teachers/:id` | Admin | Edit profile, permissions, password |
+| DELETE | `/api/teachers/:id` | Admin | Soft archive teacher |
+| GET | `/api/students` | can_view/manage_students | List students |
+| POST | `/api/students` | can_manage_students | Enroll student with fee history |
+| PATCH | `/api/students/:id` | can_manage_students | Edit student |
+| DELETE | `/api/students/:id` | can_manage_students | Archive student (clears unpaid fees) |
+| POST | `/api/students/:id/leave` | can_manage_students | Mark as Left |
+| POST | `/api/students/:id/return` | can_manage_students | Re-enroll |
+| GET | `/api/fees` | can_manage_fees | Monthly fee sheet (supports `student_status` filter) |
+| GET | `/api/fees/summary` | can_manage_fees | Monthly KPI aggregates |
+| GET | `/api/fees/student/:id` | can_manage_fees | Lifetime ledger for student |
+| POST | `/api/fees/record` | can_manage_fees | Record / revert payment |
+| POST | `/api/fees/bulk` | can_manage_fees | Bulk set fee / mark paid / waive |
+| GET | `/api/attendance/my` | Auth | Own attendance records (month/year) |
+| POST | `/api/attendance/mark-self` | Auth | Mark own attendance for today |
+| GET | `/api/attendance` | can_mark_all_attendance | All teachers' attendance for a date |
+| GET | `/api/attendance/summary` | can_mark_all_attendance | Monthly attendance ledger for all teachers |
+| GET | `/api/attendance/teacher/:id` | can_mark_all_attendance | Individual teacher's attendance history |
+| POST | `/api/attendance/bulk` | can_mark_all_attendance | Bulk mark attendance for all teachers |
+| GET | `/api/dashboard/summary` | Auth | Role-aware KPI dashboard |
+| GET | `/api/audit-logs` | Admin / can_view_audit_logs | Browse & filter audit log |
 
 ---
 
