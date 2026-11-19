@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import apiClient from '../api/axiosClient';
 import { 
   CalendarCheck, 
   AlertCircle, 
@@ -79,13 +80,8 @@ export default function MarkAttendance() {
     setDailyLoading(true);
     setMessage({ type: '', text: '' });
     try {
-      const res = await fetch(`/api/attendance?date=${date}`);
-      const json = await res.json();
-      if (!res.ok) {
-        throw new Error(json.error?.message || 'Failed to load faculty attendance');
-      }
-
-      const records = json.data.records || [];
+      const res = await apiClient.get('/attendance', { params: { date } });
+      const records = res.data.data.records || [];
       setTeachers(records);
 
       const newAttMap = {};
@@ -98,7 +94,7 @@ export default function MarkAttendance() {
       setAttendanceMap(newAttMap);
       setRemarksMap(newRemarksMap);
     } catch (err) {
-      setMessage({ type: 'error', text: err.message });
+      setMessage({ type: 'error', text: err?.message || 'Failed to load faculty attendance' });
     } finally {
       setDailyLoading(false);
     }
@@ -108,14 +104,12 @@ export default function MarkAttendance() {
     setLedgerLoading(true);
     setMessage({ type: '', text: '' });
     try {
-      const res = await fetch(`/api/attendance/summary?month=${selectedMonth}&year=${selectedYear}`);
-      const json = await res.json();
-      if (!res.ok) {
-        throw new Error(json.error?.message || 'Failed to load attendance summary ledger');
-      }
-      setLedger(json.data.ledger || []);
+      const res = await apiClient.get('/attendance/summary', {
+        params: { month: selectedMonth, year: selectedYear }
+      });
+      setLedger(res.data.data.ledger || []);
     } catch (err) {
-      setMessage({ type: 'error', text: err.message });
+      setMessage({ type: 'error', text: err?.message || 'Failed to load attendance summary ledger' });
     } finally {
       setLedgerLoading(false);
     }
@@ -165,24 +159,15 @@ export default function MarkAttendance() {
     }
 
     try {
-      const res = await fetch('/api/attendance/bulk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          date: selectedDate,
-          records: recordsToSave
-        })
+      const res = await apiClient.post('/attendance/bulk', {
+        date: selectedDate,
+        records: recordsToSave
       });
 
-      const json = await res.json();
-      if (!res.ok) {
-        throw new Error(json.error?.message || 'Failed to save attendance');
-      }
-
-      setMessage({ type: 'success', text: `Attendance for ${recordsToSave.length} teachers saved successfully!` });
+      setMessage({ type: 'success', text: res.data?.data?.message || `Attendance for ${recordsToSave.length} teachers saved successfully!` });
       fetchAttendanceForDate(selectedDate);
     } catch (err) {
-      setMessage({ type: 'error', text: err.message });
+      setMessage({ type: 'error', text: err?.message || 'Failed to save attendance' });
     } finally {
       setSaving(false);
     }

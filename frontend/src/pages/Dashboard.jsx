@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import apiClient from '../api/axiosClient';
 import { 
   Users, 
   GraduationCap, 
@@ -28,14 +29,10 @@ export default function Dashboard() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch('/api/dashboard/summary');
-      const json = await res.json();
-      if (!res.ok) {
-        throw new Error(json.error?.message || 'Failed to load dashboard metrics');
-      }
-      setData(json.data);
+      const res = await apiClient.get('/dashboard/summary');
+      setData(res.data.data);
     } catch (err) {
-      setError(err.message);
+      setError(err?.message || 'Failed to load dashboard metrics');
     } finally {
       setLoading(false);
     }

@@ -3,9 +3,11 @@ import { env } from './env.js';
 
 const { Pool } = pg;
 
+const isSslRequired = env.DATABASE_URL.includes('sslmode=require') || env.NODE_ENV === 'production';
+
 export const pool = new Pool({
   connectionString: env.DATABASE_URL,
-  ssl: env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  ssl: isSslRequired ? { rejectUnauthorized: false } : false
 });
 
 pool.on('error', (err) => {

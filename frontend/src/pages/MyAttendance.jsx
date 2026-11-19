@@ -32,15 +32,13 @@ export default function MyAttendance() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`/api/attendance/my?month=${selectedMonth}&year=${selectedYear}`);
-      const json = await res.json();
-      if (!res.ok) {
-        throw new Error(json.error?.message || 'Failed to fetch attendance');
-      }
-      setRecords(json.data.records || []);
-      setCounts(json.data.counts || { present: 0, absent: 0, late: 0, leave: 0 });
+      const res = await apiClient.get('/attendance/my', {
+        params: { month: selectedMonth, year: selectedYear }
+      });
+      setRecords(res.data.data.records || []);
+      setCounts(res.data.data.counts || { present: 0, absent: 0, late: 0, leave: 0 });
     } catch (err) {
-      setError(err.message);
+      setError(err?.message || 'Failed to fetch attendance');
     } finally {
       setLoading(false);
     }

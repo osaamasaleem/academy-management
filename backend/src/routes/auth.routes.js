@@ -100,7 +100,13 @@ router.post('/auth/login', loginLimiter, async (req, res, next) => {
 
 // POST /api/auth/logout
 router.post('/auth/logout', verifyAuth, (req, res) => {
-  res.clearCookie('academy_token', { path: '/' });
+  const isProduction = env.NODE_ENV === 'production' || env.COOKIE_SECURE;
+  res.clearCookie('academy_token', {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'None' : 'Lax',
+    path: '/'
+  });
   res.status(200).json({
     data: {
       message: 'Logged out successfully'

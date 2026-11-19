@@ -12,7 +12,6 @@ async function seedAdmin() {
     const existingAdmin = await pool.query("SELECT id, username FROM users WHERE role = 'admin'");
     if (existingAdmin.rows.length > 0) {
       console.log(`Admin account already exists (username: ${existingAdmin.rows[0].username}). Skipping seeding.`);
-      await pool.end();
       return;
     }
 

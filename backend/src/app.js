@@ -41,12 +41,19 @@ app.use(pinoHttp({
   }
 }));
 
-if (env.NODE_ENV === 'development') {
-  app.use(cors({
-    origin: env.CLIENT_ORIGIN,
-    credentials: true
-  }));
-}
+const allowedOrigins = [env.CLIENT_ORIGIN];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // allow requests with no origin (like mobile apps, curl, server-to-server)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+      return callback(null, true);
+    }
+    return callback(new Error(`CORS origin not allowed: ${origin}`));
+  },
+  credentials: true
+}));
 
 // Routes
 app.use('/api', healthRoutes);

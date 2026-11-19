@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import apiClient from '../api/axiosClient';
 import { 
   ShieldAlert, 
   Search, 
@@ -30,25 +31,20 @@ export default function AuditLogs() {
     setLoading(true);
     setError('');
     try {
-      const params = new URLSearchParams({
-        page: page.toString(),
-        pageSize: meta.pageSize.toString()
-      });
+      const params = {
+        page,
+        pageSize: meta.pageSize
+      };
 
-      if (entityType) params.append('entity_type', entityType);
-      if (fromDate) params.append('from', fromDate);
-      if (toDate) params.append('to', toDate);
+      if (entityType) params.entity_type = entityType;
+      if (fromDate) params.from = fromDate;
+      if (toDate) params.to = toDate;
 
-      const res = await fetch(`/api/audit-logs?${params.toString()}`);
-      const json = await res.json();
-      if (!res.ok) {
-        throw new Error(json.error?.message || 'Failed to fetch audit logs');
-      }
-
-      setLogs(json.data || []);
-      setMeta(json.meta || { page, pageSize: 50, total: 0 });
+      const res = await apiClient.get('/audit-logs', { params });
+      setLogs(res.data.data || []);
+      setMeta(res.data.meta || { page, pageSize: 50, total: 0 });
     } catch (err) {
-      setError(err.message);
+      setError(err?.message || 'Failed to fetch audit logs');
     } finally {
       setLoading(false);
     }
