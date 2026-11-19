@@ -197,7 +197,111 @@ Repository: https://github.com/osaamasaleem/academy-management.git
 
 ---
 
-## Phase 5: Hardening & Deployment (Pending)
-- [ ] Rate limiting verification & penetration tests
-- [ ] Production proxy configuration (Vercel rewrite or nginx)
-- [ ] Final launch checklist
+## Phase 5: Hardening & Production Deployment (Completed)
+- **Status:** Complete
+- **Date:** 2026-11-19
+- **Live Deployment URLs:**
+  - **Frontend (Vercel):** `https://academy-management-ten.vercel.app`
+  - **Backend (Render):** `https://ams-backend-cq7l.onrender.com`
+  - **Database (Neon PostgreSQL):** Serverless PostgreSQL 15+ with SSL enabled.
+
+### 1. Key Deliverables & Architecture
+- **Database Provisioning (Neon):**
+  - Connected production database via secure SSL connection string.
+  - Ran baseline migrations (`migrations/001_init.sql` & `migrations/002_ledger_refactor.sql`).
+  - Seeded initial Principal administrator account using `src/scripts/seedAdmin.js`.
+- **Backend Deployment (Render):**
+  - Production Node.js runtime configured with:
+    - `NODE_ENV=production`
+    - `PORT=10000`
+    - `TRUST_PROXY=1` (critical for rate limiting & secure cookie attribution behind Cloudflare/Render reverse proxies).
+    - `COOKIE_SECURE=true`
+    - `CLIENT_ORIGIN=https://academy-management-ten.vercel.app`
+  - Start command standardized to `node src/server.js`.
+- **Frontend Deployment (Vercel):**
+  - Built with React + Vite + Tailwind CSS.
+  - Reverse proxy rewrite configured in `frontend/vercel.json` to route `/api/*` to Render, eliminating cross-site cookie restrictions.
+  - Removed `VITE_API_URL` so `axiosClient.js` uses relative `/api`, converting session tokens to first-party cookies.
+- **Production Verification & Testing:**
+  - Verified on desktop browsers (Chrome, Edge, Firefox) and mobile devices (Safari on iOS, Chrome on Android).
+  - Smoke-tested end-to-end user journeys:
+    - Principal Admin login & logout.
+    - Teacher attendance tracking (self-marking & bulk marking).
+    - Student directory management and enrollment.
+    - Fee recording, waiving, and ledger viewing.
+    - Audit logs viewing with granular permission gating.
+
+---
+
+### 2. Deployment Challenges & Technical Struggles
+
+During the Phase 5 deployment, several real-world production hurdles were encountered and resolved:
+
+#### Struggle 1: Database Migration Path & Context Errors
+- **Issue:** Attempting to run `node src/scripts/migrate.js` from the repository root produced `MODULE_NOT_FOUND: Cannot find module '.../AMS/src/scripts/migrate.js'`.
+- **Root Cause:** Path resolution expected execution from within the `backend/` working directory.
+- **Resolution:** Explicitly changed directory to `backend/` before running maintenance and migration CLI scripts (`cd backend && node src/scripts/migrate.js`).
+
+#### Struggle 2: Render Start Command Mismatch
+- **Issue:** Render failed to boot the backend service with: `Error: Cannot find module '/opt/render/project/src/backend/src/index.js'`.
+- **Root Cause:** Render defaults Node service entry points to `src/index.js`, whereas the application server entry point is `src/server.js`.
+- **Resolution:** Configured the Render build & service settings:
+  - Root directory: `backend`
+  - Build command: `npm install`
+  - Start command: `node src/server.js`
+
+#### Struggle 3: Database Schema Drift (`can_view_audit_logs`)
+- **Issue:** After logging in on production, dashboard requests (`GET /api/dashboard/summary`) returned `401 Unauthorized` with `{"error": {"code": "UNAUTHENTICATED", "message": "Session invalid or expired"}}`, despite valid user credentials.
+- **Root Cause:** `verifyAuth.js` executes:
+  ```sql
+  SELECT id, full_name, username, role, is_active, token_version,
+         can_view_students, can_manage_students, can_mark_all_attendance, can_manage_fees,
+         can_view_audit_logs
+  FROM users WHERE id = $1
+  ```
+  The column `can_view_audit_logs` had been added in code during Phase 4 permissions development but was missing in the baseline `users` table definition on the freshly deployed Neon database. When PostgreSQL threw `column "can_view_audit_logs" does not exist`, the catch block in `verifyAuth.js` treated it as an authentication failure and responded with 401.
+- **Resolution:** Ran a targeted DDL patch in the Neon SQL console:
+  ```sql
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS can_view_audit_logs BOOLEAN NOT NULL DEFAULT FALSE;
+  ```
+  Also ensured schema sync across migrations to maintain repeatable deploys.
+
+#### Struggle 4: Third-Party Cookie Blocking on Safari / iOS / Incognito
+- **Issue:** Authentication worked in standard Chrome desktop sessions where third-party cookies were relaxed, but consistently failed on iOS Safari, Chrome on iOS, and Incognito windows with `401 Unauthorized: Authentication required`. Login succeeded, but subsequent API calls dropped the cookie.
+- **Root Cause:**
+  - The frontend was hosted at `https://academy-management-ten.vercel.app` while the backend was at `https://ams-backend-cq7l.onrender.com`.
+  - Because the domains are completely different, the browser treated `academy_token` as a **Third-Party Cookie**.
+  - Modern privacy standards (Apple Safari ITP, iOS webviews, and modern Chrome privacy sandboxes) strictly block cross-site third-party cookies by default.
+- **Architectural Decision & Resolution:**
+  - *Option Considered (Rejected):* Moving the JWT to `localStorage` or `sessionStorage` and passing it via the `Authorization: Bearer` header. This was explicitly **rejected** because storing long-lived (7-day) credentials in client storage exposes student records, CNIC data, and financial history to theft via Cross-Site Scripting (XSS), violating `AGENTS.md` and SRS security standards.
+  - *Winning Solution:* Implemented a **Same-Origin Reverse Proxy Rewrite** on Vercel:
+    Updated `frontend/vercel.json`:
+    ```json
+    {
+      "rewrites": [
+        {
+          "source": "/api/:path*",
+          "destination": "https://ams-backend-cq7l.onrender.com/api/:path*"
+        },
+        {
+          "source": "/(.*)",
+          "destination": "/index.html"
+        }
+      ]
+    }
+    ```
+    - Removed `VITE_API_URL` from Vercel's environment settings.
+    - Since `axiosClient.js` defaults to `/api` when `VITE_API_URL` is omitted, all frontend HTTP requests are sent to `https://academy-management-ten.vercel.app/api/...`.
+    - Vercel's edge network proxies requests transparently to Render.
+    - The browser sees the API and cookies as strictly **first-party (same-origin)**, allowing `HttpOnly; Secure; SameSite=Lax` cookies to persist seamlessly across all devices, Safari iOS, and incognito sessions without compromising security.
+
+---
+
+### 3. Launch Checklist & Final Sign-Off
+- [x] Database live on Neon with SSL & connections pooled.
+- [x] Backend deployed on Render with `TRUST_PROXY=1` and `NODE_ENV=production`.
+- [x] Reverse proxy active on Vercel (`/api/*` rewrite).
+- [x] HttpOnly session cookies verified as first-party across mobile and desktop.
+- [x] Granular RBAC and DB-backed permission checks validated.
+- [x] Zero sensitive credentials or PII stored in Git.
+- [x] Full application verified operational end-to-end.
